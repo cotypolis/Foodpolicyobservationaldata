@@ -1,0 +1,591 @@
+---
+title: "National Diet and Nutrition Survey_DiD"
+author: "Constanza Avalos"
+date: "2024-04-10"
+output: 
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Nutritional Diet and Health Survey UK
+
+The National Diet and Nutrition Survey (NDNS) Rolling Programme (RP) began in 2008 and is designed to assess the diet, nutrient intake and nutritional status of the general population aged 1.5 years and over living in private households in the UK. (For details of the previous NDNS series, which began in 1992, see the documentation for studies 3481, 4036, 4243 and 5140.)
+
+The programme is funded by Public Health England (PHE), an executive agency of the Department of Health, and the UK Food Standards Agency (FSA).
+
+The NDNS RP is currently carried out by a consortium comprising NatCen Social Research (NatCen) (NatCen, contract lead) and the MRC Epidemiology Unit, University of Cambridge (scientific lead). The MRC Epidemiology Unit joined the consortium in November 2017. Until December 2018, the consortium included the MRC Elsie Widdowson Laboratory, Cambridge (former scientific lead). In Years 1 to 5 (2008/09 – 2012/13) the consortium also included the University College London Medical School (UCL).
+
+Survey activities at the MRC Epidemiology Unit are delivered with the support of the National Institute for Health Research (NIHR) Cambridge Biomedical Research Centre (IS-BRC-1215- 20014), comprising the NIHR BRC Nutritional Biomarker Laboratory and NIHR BRC Dietary Assessment and Physical Activity Group. The NIHR Cambridge Biomedical Research Centre is a partnership between Cambridge University Hospitals NHS Foundation Trust and the University of Cambridge, funded by the NIHR. 
+
+The NDNS RP provides the only source of high quality, nationally representative UK data on the types and quantities of foods consumed by individuals, from which estimates of nutrient intake for the population are derived. Results are used by Government to develop policy and monitor progress toward diet and nutrition objectives of UK Health Departments, for example work to tackle obesity and monitor progress towards a healthy, balanced diet as visually depicted in the Eatwell Guide. The NDNS RP provides an important source of evidence underpinning the Scientific Advisory Committee on Nutrition (SACN) work relating to national nutrition policy. The food consumption data are also used by the FSA to assess exposure to chemicals in food, as part of the risk assessment and communication process in response to a food emergency or to inform negotiations on setting regulatory limits for contaminants.
+
+Datasets are available from the UK Data Service webpage: https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=6533#!/details.
+
+Abstract copyright UK Data Service and data collection copyright owner.
+
+
+## Datasets 2008-2019
+
+This Survey has different datasets. I will use the food diary report. This is a participant self-report of everything eaten and drunk over a 24-hour period (midnight to midnight), the preceding day. Participants in this study were asked to complete 4 recalls on non-consecutive days. 3 datasets are key. 1) One that groups the consumption report into food categories. 2) One that contains the detail of grams consumed by each category at the individual level and 3) one that contains the amount of nutrients consumed at the individual level. The databases have details such as days of the week of the reports, time, data, country, age, gender, among others. In addition, the database is multilevel: individual, household, region, country. Finally, there is another database that contains socio-demographic information, anthropometric measures (BMI, weight, height) and more at the level of the individual. 
+
+
+```{r data, echo=FALSE}
+
+# Working directory
+
+#setwd("C:/Users/n51867ca/OneDrive - The University of Manchester/R/Second paper")
+
+# input Stata file
+library(openxlsx)
+library(readxl)
+library(foreign)
+library(stringi)
+
+# For a stata file
+
+library(haven)
+#ndns_rp_yr9_11a_indiv_20211020 <- read_dta("C:/Users/n51867ca/OneDrive - The University of Manchester/R/National Diet and Nutrition Survey 1-11, #2008-2019/stata/stata13_se/ndns_rp_yr9_11a_indiv_20211020.dta")
+
+#import data individuals
+
+#library(readr)
+#DS_individuals_exploration_10042024 <- read_csv("DS_individuals_exploration_10042024_full.csv")
+
+#export to csv
+
+#write.csv(ndns_rp_yr5.6a_indiv, "ndns_rp_yr5.6a_indiv.csv")
+#write.csv(ndns_rp_yr1.4a_indiv_uk, "ndns_rp_yr1.4a_indiv_uk.csv")
+
+# Data structure
+
+head(DS_individuals_exploration_10042024_full)
+
+# Check the structure of the dataset to confirm column names and types
+
+str(DS_individuals_exploration_10042024_full)
+
+
+```
+
+## Statistics 
+
+The dataset "ndns_rp_yr9_yr9_11a_dayleveldietarydata_nutrients_uk_20210831" contains information on nutrients consumed at the individual level. I will split the data to analyse only respondents over 16 years of age. This database also contains the variable BMI which is used to designate the treatment and control group.  In this quasi-experimental design, the control group is adults whose BMI is below 25 (D=0) and the treatment group is adults whose BMI is equal to or above 25 (D=1).
+In this database, the BMI variable contains 5 groups corresponding to different BMI ranges. According to NHS guidelines, Below 18.5 = Underweight, 18.5 and below 25 = Healthy weight, 25 and below 30 = Overweight,30 and under 40 = Obese, over 40 = Obese.
+
+```{r summary, echo=FALSE, results='asis'}
+
+library(summarytools)
+
+# Replace negative values with NA across the entire dataset
+DS_individuals_exploration_10042024_full[DS_individuals_exploration_10042024_full < 0] <- NA
+
+summary <- dfSummary(DS_individuals_exploration_10042024_full, graph.magnif = 0.75, plain.ascii = FALSE, style = "grid")
+print(summary, method = 'render')
+
+```
+
+
+## Identification Treatment Groups - BMI
+
+The Difference-in-Differences (DiD) approach is a quasi-experimental design used to estimate the effect of a specific intervention or treatment (such as a policy change) by comparing the changes in outcomes over time between a population that is enrolled in a program (treatment group) and a population that is not (control group).
+
+Given the data spans from 2008 to 2019 and the policy was implemented in 2013, I can structure the analysis to compare the pre- and post-policy periods across the treatment and control groups.
+
+This is the structure for R code for a Difference-in-Differences analysis. This exploration assumes I have a dataset with the following columns:
+
+1. Year: the year of observation
+2. Treated: a binary indicator where 1 indicates the observation is from the treatment group (affected by the policy in 2013) and 0 indicates it's from the control group, in this case Body Mass Index BMI over 26 
+3. Outcome: Calorie and Energy (grams)
+
+The treatment group corresponds to units with a BMI above 26, classified as overweight and obesity by the WHO. The control groups are the units with a BMI below 26.
+
+Interpreting the coefficients in a Difference-in-Differences (DiD) model involves understanding the role of each term in the regression and focusing on the interaction term, which provides the estimate of the policy's effect.
+
+1. Treatment Group Indicator (treated): This coefficient represents the difference in the outcome variable between the treatment and control groups in the pre-policy period. It captures any pre-existing differences between the two groups before the policy was implemented. However, in the context of DiD, we are often more interested in the changes over time rather than the initial differences, so this coefficient is not the primary focus.
+
+2. Policy Period Indicator (policy): This coefficient represents the overall time trend, showing the change in the outcome variable from the pre-policy to the post-policy period, ignoring the treatment status. It captures the general trend that would have occurred even without the policy intervention. This coefficient is also not the primary focus of DiD analysis but is necessary to control for time effects.
+
+3. Interaction Term (treated_policy): This is the most critical coefficient in the DiD analysis. It represents the estimated effect of the policy intervention. Specifically, it measures the difference in the outcome's changes over time between the treatment and control groups. In other words, it captures the additional change in the outcome for the treatment group attributable to the policy, beyond any general time trends. A statistically significant coefficient suggests that the policy had a measurable effect on the outcome variable for the treatment group.
+
+a). If the coefficient is positive and statistically significant, it indicates that the policy had a positive effect on the treated group compared to the control group.
+b). If the coefficient is negative and statistically significant, it suggests that the policy had a negative effect on the treated group compared to the control group.
+c). If the coefficient is not statistically significant, it suggests that the policy did not have a measurable effect on the outcome variable for the treated group compared to the control group.
+
+
+
+```{r DiD, echo=FALSE}
+
+library(tidyverse)
+library(lmtest)
+library(dplyr)
+
+DS_individuals_exploration_10042024_full <- DS_individuals_exploration_10042024_full %>%
+    mutate(Year = as.numeric(Year), # Convert SurveyYear to numeric
+          Year = case_when(
+           Year == 1 ~ 2009,
+           Year == 2 ~ 2010,
+           Year == 3 ~ 2011,
+           Year == 4 ~ 2012,
+           Year == 5 ~ 2013,
+           Year == 6 ~ 2014,
+           Year == 7 ~ 2015,
+           Year == 8 ~ 2016,
+           Year == 9 ~ 2017,
+           Year == 10 ~ 2018,
+           Year == 11 ~ 2019,
+    TRUE ~ Year # Keeps the original value if none of the conditions above are met
+  ))
+
+
+# Convert -1 in Body Mass Index (bmival2) to NA, create treatment variable
+DS_individuals_exploration_10042024_full <- DS_individuals_exploration_10042024_full %>%
+    filter(bmivg5 != -1) %>%
+    mutate(
+    treatment = if_else(bmival2 > 25, 0, 1), # Include condition here with the condition that defines the treatment group
+    post_policy = if_else(Year >= 2013, 1, 0)
+  )
+
+#create a contingency table
+cont_table <- table(DS_individuals_exploration_10042024_full$Year, DS_individuals_exploration_10042024_full$treatment)
+cont_table
+percent_table <- prop.table(cont_table) * 100
+percent_table
+cont_table_bmi <- table(DS_individuals_exploration_10042024_full$Year, DS_individuals_exploration_10042024_full$bmivg5)
+cont_table_bmi
+cont_table_pol <- table(DS_individuals_exploration_10042024_full$Year, DS_individuals_exploration_10042024_full$post_policy)
+cont_table_pol
+
+```
+## Weighting
+
+I will use the document "6533_ndns_yrs9-11_weights_guide" hosted on the UK Data Service website to combine the data from Years 1-4, Years 5&6, Years 7&8 and Years 9-11. 
+
+The NDNS datasets for Years 1-4, Years 5&6, Years 7&8 and Years 9-11 can be combined for analysis of Years 1-11 but, to produce valid results, the four sets of weights should be re-scaled. This will ensure that the four sets of data are in their correct proportions i.e. 4:2:2:3. A different calculation is required for each weight (individual, nurse, blood etc). 
+
+Re-scaling is necessary because there were different numbers of participants in each dataset/year. The number of participants per dataset/year is as follows: 
+
+1. 1-4 6,828
+2. 5&6 2,546 
+3. 7&8 2,723 
+4. 9-11 3,558 
+5. Total 15,655
+
+If the weights were combined into one variable without any further adjustment, Years 1-4 and Years 7&8 would have more weight per year than other years, while Years 9-11 would have less weight per year. 
+
+To re-scale the weights correctly, it is necessary to perform the following calculations: 
+
+1. Divide each weight variable by its sum (i.e. the sum of the weights); 
+2. Multiply each by the combined sum of the four weights (15,655); 
+3. Multiply the Years 1-4 weight by 4/11, Years 5&6 weight by 2/11, Years 7&8 weight by 2/11 and Years 9-11 weight by 3/11. 
+
+The resulting weights can then be combined into one variable. 
+
+
+
+```{r weight, echo=FALSE}
+
+# Multiply each weight by 15655
+
+DS_individuals_exploration_10042024_full$adjustedweight <- DS_individuals_exploration_10042024_full$Weight * 15655
+
+#Multiply each by the combined sum of the four weights
+
+DS_individuals_exploration_10042024_full$FinalWeight <- ifelse(DS_individuals_exploration_10042024_full$Year >= 2009 & DS_individuals_exploration_10042024_full$Year <= 2012, 
+                           (DS_individuals_exploration_10042024_full$adjustedweight / 6828) * 0.3636,
+                           ifelse(DS_individuals_exploration_10042024_full$Year >= 2013 & DS_individuals_exploration_10042024_full$Year <= 2014,
+                                  (DS_individuals_exploration_10042024_full$adjustedweight  / 2546) * 0.1818,
+                                  ifelse(DS_individuals_exploration_10042024_full$Year >= 2015 & DS_individuals_exploration_10042024_full$Year <= 2016,
+                                         (DS_individuals_exploration_10042024_full$adjustedweight  / 2723) * 0.1818,
+                                         ifelse(DS_individuals_exploration_10042024_full$Year >= 2017 & DS_individuals_exploration_10042024_full$Year <= 2019,
+                                                (DS_individuals_exploration_10042024_full$adjustedweight  / 3558) * 0.2727,
+                                                NA))))  # NA for years outside specified ranges
+
+
+mean_final_weight_per_year <- aggregate(FinalWeight ~ Year, DS_individuals_exploration_10042024_full, mean, na.rm = TRUE)
+print(mean_final_weight_per_year)
+
+```
+
+## Differences-in-Differences Full dataset - No weights
+
+Good source to explain the coefficients: https://ds4ps.org/PROG-EVAL-III/DiffInDiff.html
+
+```{r DiDest, echo=FALSE}
+
+library(stargazer)
+library(tidyverse)
+library(lmtest)
+
+did_model1 <- lm(`Sum of Energykcal` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_full)
+
+did_model2 <- lm(`Sum of EnergykJ` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_full)
+
+did_model3 <- lm(`Sum of FoodEkcal` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_full)
+
+did_model4 <- lm(`Sum of FoodEkJ` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_full)
+
+# Create a summary table
+stargazer(did_model1, did_model2, did_model3, did_model4, type = "text", 
+          title = "Difference-in-Differences Models",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Energy Kl DiD", "Energy Kj DiD", "Food kl DiD", "Food kj DiD"),
+          covariate.labels = c("Treatment*Post", "Control 1", "Year Fixed Effects", "ID Fixed Effects"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+                    digits = 3) # Number of digits to display
+
+```
+
+## Differences-in-Differences Full dataset - Weights
+
+
+
+```{r DiDestw, echo=FALSE}
+
+library(stargazer)
+library(tidyverse)
+library(lmtest)
+
+did_model1_w <- lm(`Sum of Energykcal` ~ treatment * post_policy + FinalWeight, data = DS_individuals_exploration_10042024_full)
+
+did_model2_w <- lm(`Sum of EnergykJ` ~ treatment * post_policy + FinalWeight, data = DS_individuals_exploration_10042024_full)
+
+did_model3_w <- lm(`Sum of FoodEkcal` ~ treatment * post_policy + FinalWeight, data = DS_individuals_exploration_10042024_full)
+
+did_model4_w <- lm(`Sum of FoodEkJ` ~ treatment * post_policy + FinalWeight, data = DS_individuals_exploration_10042024_full)
+
+# Create a summary table
+stargazer(did_model1_w, did_model2_w, did_model3_w, did_model4_w, type = "text", 
+          title = "Difference-in-Differences Models",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Energykcal", "EnergykJ", "FoodEkcal", "FoodEkJ"),
+          covariate.labels = c("Treatment group", "Post-treatment", "FinalWeight", "Diff in Diff"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+                    digits = 3) # Number of digits to dis
+
+```
+## Differences-in-Differences Full dataset for variable FoodEkcal - Weights + Covariates
+
+The lower AUC/BIC is the second model including covariates Sex and Age. 
+
+How to improve the R2:
+
+1. Include Relevant Variables
+
+Add Control Variables: Include additional control variables that are relevant to the model and could affect the dependent variable. These might include demographic factors, economic indicators, or other covariates specific to your study.
+
+Interaction Terms: Consider whether interaction terms between control variables and the treatment indicator might capture more complex effects of the treatment.
+
+2. Transform Variables
+
+Non-linear Transformations: If relationships between variables are non-linear, transformations like log, square, or square root might better capture these relationships.
+
+Polynomial Terms: Adding polynomial terms (e.g., squared terms of predictors) can help fit non-linear relationships but be cautious of overfitting.
+
+3. Improve Data Quality
+
+Increase Sample Size: More data can provide a more accurate estimate of the relationship between variables.
+
+Address Missing Data: Properly handling missing data, either by imputation or by using models that can accommodate missingness, can improve the model's performance.
+
+Remove Outliers: Outliers can skew results and affect the adjusted R-squared. Analyzing and potentially removing outliers may improve model accuracy.
+
+4. Temporal and Spatial Dynamics
+
+Time Trends: If applicable, include time-specific variables that capture trends over the period studied which are not captured by the treatment and control year dummies.
+
+Spatial Effects: If your data has a spatial element, consider including location-specific variables or fixed effects.
+
+5. Model Specification
+
+Fixed Effects: Use fixed effects to control for unobserved variables that are constant within groups but vary across them, such as individual or regional characteristics.
+
+Random Effects: If appropriate, considering a random effects model might be useful, especially if you believe that differences across entities (like individuals or regions) are not correlated with the independent variables.
+
+6. Diagnostic Tests and Residual Analysis
+
+Check for Model Assumptions: Ensure that the model meets the key assumptions of linear regression (linearity, independence, homoscedasticity, normality of residuals).
+
+Residual Plots: Analyze residual plots for any patterns that suggest poor model fit or violations of assumptions. Adjust the model accordingly.
+
+7. Cross-Validation
+
+Validation Techniques: Use techniques like cross-validation to ensure that improvements in the model are generalizable and not just fitting the noise in the sample data.
+
+```{r DiDestw_c, echo=FALSE}
+
+library(stargazer)
+library(tidyverse)
+library(lmtest)
+
+did_model1_w_c <- lm(`Sum of FoodEkcal` ~ treatment * post_policy + FinalWeight + Sex, data = DS_individuals_exploration_10042024_full)
+
+did_model2_w_c <- lm(`Sum of FoodEkcal` ~ treatment * post_policy + FinalWeight + Sex + AgeR, data = DS_individuals_exploration_10042024_full)
+
+did_model3_w_c <- lm(`Sum of FoodEkcal` ~ treatment * post_policy + FinalWeight + Sex + AgeR + region, data = DS_individuals_exploration_10042024_full)
+
+did_model4_w_c <- lm(`Sum of FoodEkcal` ~ treatment * post_policy + FinalWeight + Sex + AgeR + region + country, data = DS_individuals_exploration_10042024_full)
+
+# Create a summary table
+
+stargazer(did_model1_w_c, did_model2_w_c,did_model3_w_c, did_model4_w_c, type = "text", 
+          title = "Difference-in-Differences Models",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Control 1", "Control 2", "Control 3", "Control 4"),
+          covariate.labels = c("Treatment group", "Post-treatment", "FinalWeight", "Sex", "Age", "Region", "Country"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+                    digits = 3) # Number of digits to display
+
+#  Lower AIC/BIC
+cat("AIC for Model 1:", AIC(did_model1_w_c), "\n")
+cat("AIC for Model 2:", AIC(did_model2_w_c), "\n")
+cat("AIC for Model 3:", AIC(did_model3_w_c), "\n")
+cat("AIC for Model 4:", AIC(did_model4_w_c), "\n")
+
+```
+
+
+## Differences-in-Differences 16+ only - No weights
+
+
+```{r DiDestadult, echo=FALSE}
+
+#split the database
+
+DS_individuals_exploration_10042024_full$AgeR <- as.numeric(as.character(DS_individuals_exploration_10042024_full$AgeR))
+
+library(dplyr)
+DS_individuals_exploration_10042024_filtered <- DS_individuals_exploration_10042024_full %>%
+  dplyr::filter(AgeR >= 16)
+
+#create a contingency table
+cont_tablead <- table(DS_individuals_exploration_10042024_filtered$Year, DS_individuals_exploration_10042024_filtered$treatment)
+cont_tablead
+cont_table_bmiad <- table(DS_individuals_exploration_10042024_filtered$Year, DS_individuals_exploration_10042024_filtered$bmivg5)
+cont_table_bmiad
+cont_table_polad <- table(DS_individuals_exploration_10042024_filtered$Year, DS_individuals_exploration_10042024_filtered$post_policy)
+cont_table_polad
+
+
+library(tidyverse)
+library(lmtest)
+
+did_model5 <- lm(`Sum of Energykcal` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_filtered)
+
+did_model6 <- lm(`Sum of EnergykJ` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_filtered)
+
+did_model7 <- lm(`Sum of FoodEkcal` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_filtered)
+
+did_model8 <- lm(`Sum of FoodEkJ` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_filtered)
+
+# Create a summary table
+stargazer(did_model5, did_model6, did_model7, did_model8, type = "text", 
+          title = "Difference-in-Differences Models, adults only",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Energy Kl DiD", "Energy Kj DiD", "Food kl DiD", "Food kj DiD"),
+          covariate.labels = c("Treatment*Post", "Control 1", "Control 2", "Year Fixed Effects", "ID Fixed Effects"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+          digits = 3) # Number of digits to display
+
+```
+
+## Differences-in-Differences 16+ only - Weights
+
+
+```{r DiDestadult_w, echo=FALSE}
+
+
+library(tidyverse)
+library(lmtest)
+
+did_model5_w <- lm(`Sum of Energykcal` ~ treatment * post_policy + FinalWeight, data = DS_individuals_exploration_10042024_filtered)
+
+did_model6_w <- lm(`Sum of EnergykJ` ~ treatment * post_policy + FinalWeight, data = DS_individuals_exploration_10042024_filtered)
+
+did_model7_w <- lm(`Sum of FoodEkcal` ~ treatment * post_policy + FinalWeight, data = DS_individuals_exploration_10042024_filtered)
+
+did_model8_w <- lm(`Sum of FoodEkJ` ~ treatment * post_policy + FinalWeight, data = DS_individuals_exploration_10042024_filtered)
+
+# Create a summary table
+stargazer(did_model5_w, did_model6_w, did_model7_w, did_model8_w, type = "latex", 
+          title = "Difference-in-Differences Models, adults only",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Energy Kl DiD", "Energy Kj DiD", "Food kl DiD", "Food kj DiD"),
+          covariate.labels = c("Treatment group", "Post-treatment", "FinalWeight", "Diff in Diff"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+          digits = 3) # Number of digits to display
+
+```
+## Differences-in-Differences 16+ only for variable FoodEkcal - Weights + Covariates
+
+The lower AUC/BIC is the second model including covariates Sex and Age. 
+
+```{r DiDestw_c_16, echo=FALSE}
+
+library(stargazer)
+library(tidyverse)
+library(lmtest)
+
+did_model5_w_c <- lm(`Sum of FoodEkcal` ~ treatment * post_policy + FinalWeight + Sex, data = DS_individuals_exploration_10042024_filtered)
+
+did_model6_w_c <- lm(`Sum of FoodEkcal` ~ treatment * post_policy + FinalWeight + Sex + AgeR, data = DS_individuals_exploration_10042024_filtered)
+
+did_model7_w_c <- lm(`Sum of FoodEkcal` ~ treatment * post_policy + FinalWeight + Sex + AgeR + region, data = DS_individuals_exploration_10042024_filtered)
+
+did_model8_w_c <- lm(`Sum of FoodEkcal` ~ treatment * post_policy + FinalWeight + Sex + AgeR + region + country, data = DS_individuals_exploration_10042024_filtered)
+
+# Create a summary table
+
+stargazer(did_model5_w_c, did_model6_w_c,did_model7_w_c, did_model8_w_c, type = "latex", 
+          title = "Difference-in-Differences Models 16+ Only",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Control 1", "Control 2", "Control 3", "Control 4"),
+          covariate.labels = c("Treatment group", "Post-treatment", "FinalWeight", "Sex", "Age", "Region", "Country"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+                    digits = 3) # Number of digits to display
+
+#  Lower AIC/BIC
+cat("AIC for Model 1:", AIC(did_model5_w_c), "\n")
+cat("AIC for Model 2:", AIC(did_model6_w_c), "\n")
+cat("AIC for Model 3:", AIC(did_model7_w_c), "\n")
+cat("AIC for Model 4:", AIC(did_model8_w_c), "\n")
+
+```
+
+## Check for Parallel Trends Assumption - No weights
+
+The Difference-in-Differences (DiD) model relies on several key assumptions to provide valid estimates of the causal effect of a treatment or policy intervention. Understanding and verifying these assumptions is crucial for the correct interpretation of DiD results. The main assumptions are:
+
+1. Parallel Trends Assumption: This is the most critical assumption of the DiD approach. It requires that, in the absence of the treatment (policy intervention), the average outcomes for the treated and control groups would have followed parallel paths over time. This means that any pre-treatment differences between the groups remain constant over time, allowing us to attribute post-treatment differences in trends to the treatment effect. The parallel trends assumption can be assessed visually by plotting the pre-treatment trends of the outcome variable for both groups or tested formally using statistical methods.
+
+2. No Spillover Effects: The assumption here is that the treatment of one group does not affect the outcome of the other group. In other words, the policy or intervention should only impact the treated group and not indirectly influence the control group's outcomes through spillover or externalities.
+
+3. Stable Composition of Treatment and Control Groups: This assumption requires that the composition of the treatment and control groups remains stable over time. Changes in the composition of these groups could introduce bias. For example, if more high-income individuals enter the treatment group after the policy is implemented, observed changes in outcomes might reflect this compositional change rather than the effect of the policy.
+
+4. Treatment Timing is Exogenous: The timing of the treatment or policy intervention should not be influenced by potential outcomes. If the treatment is applied in response to expected changes in the outcome variable, it could bias the DiD estimate. The treatment should be as if randomly assigned in time, independent of the potential outcomes.
+
+5. No Anticipation Effects: This assumption implies that individuals or entities in the treatment group do not change their behavior before the actual implementation of the policy in anticipation of its effects. If the treatment group alters its behavior in anticipation of the treatment, it could confound the estimation of the treatment effect.
+
+I fit the DiD model using a linear regression, where the outcome variable is regressed on the treatment indicator, the post-policy indicator, and their interaction. The interaction term is crucial as it represents the DiD estimate. The coefficient of the interaction term (treatment:post_policy) is your DiD estimate, representing the average treatment effect of the policy.
+
+A key assumption of the DiD approach is that the treatment and control groups would have followed parallel trends in the absence of the treatment. While this cannot be directly tested, you can visually inspect pre-treatment trends to check for parallelism:
+
+```{r DiDplot, echo=FALSE}
+
+DS_individuals_exploration_10042024_full %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of Energykcal`, na.rm = TRUE)) %>%
+  ggplot(aes(x = Year, y = mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends", color = "Treatment Group")
+
+DS_individuals_exploration_10042024_full %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of EnergykJ`, na.rm = TRUE)) %>%
+  ggplot(aes(x = Year, y = mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends2", color = "Treatment Group")
+
+DS_individuals_exploration_10042024_full %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of FoodEkcal`, na.rm = TRUE)) %>%
+  ggplot(aes(x = Year, y = mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends3", color = "Treatment Group")
+
+DS_individuals_exploration_10042024_full %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of FoodEkJ`, na.rm = TRUE)) %>%
+  ggplot(aes(x = Year, y = mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends4", color = "Treatment Group")
+
+```
+
+## Check for Parallel Trends Assumption - Weights
+
+
+```{r DiDplotw, echo=FALSE}
+
+# Adjust the outcome by the mean of FinalWeight for each group and year
+adjusted_plot_data <- DS_individuals_exploration_10042024_full %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of Energykcal`, na.rm = TRUE),
+            mean_final_weight = mean(FinalWeight, na.rm = TRUE)) %>%
+  mutate(adjusted_mean_outcome = mean_outcome / mean_final_weight) %>%
+  ungroup()
+
+# Plot the adjusted mean outcomes
+ggplot(adjusted_plot_data, aes(x = Year, y = adjusted_mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends Adjusted by Final Weight",
+       y = "Adjusted Mean of Energykcal",
+       x = "Year",
+       color = "Treatment Group")
+
+# Adjust the outcome by the mean of FinalWeight for each group and year
+adjusted_plot_data2 <- DS_individuals_exploration_10042024_full %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of EnergykJ`, na.rm = TRUE),
+            mean_final_weight = mean(FinalWeight, na.rm = TRUE)) %>%
+  mutate(adjusted_mean_outcome = mean_outcome / mean_final_weight) %>%
+  ungroup()
+
+# Plot the adjusted mean outcomes
+ggplot(adjusted_plot_data2, aes(x = Year, y = adjusted_mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends Adjusted by Final Weight",
+       y = "Adjusted Mean of Energykj",
+       x = "Year",
+       color = "Treatment Group")
+
+# Adjust the outcome by the mean of FinalWeight for each group and year
+adjusted_plot_data3 <- DS_individuals_exploration_10042024_full %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of FoodEkcal`, na.rm = TRUE),
+            mean_final_weight = mean(FinalWeight, na.rm = TRUE)) %>%
+  mutate(adjusted_mean_outcome = mean_outcome / mean_final_weight) %>%
+  ungroup()
+
+# Plot the adjusted mean outcomes
+ggplot(adjusted_plot_data3, aes(x = Year, y = adjusted_mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends Adjusted by Final Weight",
+       y = "Adjusted Mean of FoodEkcal",
+       x = "Year",
+       color = "Treatment Group")
+
+# Adjust the outcome by the mean of FinalWeight for each group and year
+adjusted_plot_data4 <- DS_individuals_exploration_10042024_full %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of FoodEkJ`, na.rm = TRUE),
+            mean_final_weight = mean(FinalWeight, na.rm = TRUE)) %>%
+  mutate(adjusted_mean_outcome = mean_outcome / mean_final_weight) %>%
+  ungroup()
+
+# Plot the adjusted mean outcomes
+ggplot(adjusted_plot_data4, aes(x = Year, y = adjusted_mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends Adjusted by Final Weight",
+       y = "Adjusted Mean of FoodEkJ",
+       x = "Year",
+       color = "Treatment Group")
+
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

@@ -1,0 +1,255 @@
+---
+title: "National Diet and Nutrition Survey_Synthetic Control Model"
+author: "Constanza Avalos"
+date: "2024-04-12"
+output: 
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Nutritional Diet and Health Survey UK
+
+The National Diet and Nutrition Survey (NDNS) Rolling Programme (RP) began in 2008 and is designed to assess the diet, nutrient intake and nutritional status of the general population aged 1.5 years and over living in private households in the UK. (For details of the previous NDNS series, which began in 1992, see the documentation for studies 3481, 4036, 4243 and 5140.)
+
+The programme is funded by Public Health England (PHE), an executive agency of the Department of Health, and the UK Food Standards Agency (FSA).
+
+The NDNS RP is currently carried out by a consortium comprising NatCen Social Research (NatCen) (NatCen, contract lead) and the MRC Epidemiology Unit, University of Cambridge (scientific lead). The MRC Epidemiology Unit joined the consortium in November 2017. Until December 2018, the consortium included the MRC Elsie Widdowson Laboratory, Cambridge (former scientific lead). In Years 1 to 5 (2008/09 – 2012/13) the consortium also included the University College London Medical School (UCL).
+
+Survey activities at the MRC Epidemiology Unit are delivered with the support of the National Institute for Health Research (NIHR) Cambridge Biomedical Research Centre (IS-BRC-1215- 20014), comprising the NIHR BRC Nutritional Biomarker Laboratory and NIHR BRC Dietary Assessment and Physical Activity Group. The NIHR Cambridge Biomedical Research Centre is a partnership between Cambridge University Hospitals NHS Foundation Trust and the University of Cambridge, funded by the NIHR. 
+
+The NDNS RP provides the only source of high quality, nationally representative UK data on the types and quantities of foods consumed by individuals, from which estimates of nutrient intake for the population are derived. Results are used by Government to develop policy and monitor progress toward diet and nutrition objectives of UK Health Departments, for example work to tackle obesity and monitor progress towards a healthy, balanced diet as visually depicted in the Eatwell Guide. The NDNS RP provides an important source of evidence underpinning the Scientific Advisory Committee on Nutrition (SACN) work relating to national nutrition policy. The food consumption data are also used by the FSA to assess exposure to chemicals in food, as part of the risk assessment and communication process in response to a food emergency or to inform negotiations on setting regulatory limits for contaminants.
+
+Datasets are available from the UK Data Service webpage: https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=6533#!/details.
+
+Abstract copyright UK Data Service and data collection copyright owner.
+
+## Datasets 2008-2019
+
+This Survey has different datasets. I will use the food diary report. This is a participant self-report of everything eaten and drunk over a 24-hour period (midnight to midnight), the preceding day. Participants in this study were asked to complete 4 recalls on non-consecutive days. 3 datasets are key. 1) One that groups the consumption report into food categories. 2) One that contains the detail of grams consumed by each category at the individual level and 3) one that contains the amount of nutrients consumed at the individual level. The databases have details such as days of the week of the reports, time, data, country, age, gender, among others. In addition, the database is multilevel: individual, household, region, country. Finally, there is another database that contains socio-demographic information, anthropometric measures (BMI, weight, height) and more at the level of the individual. 
+
+
+```{r data, echo=FALSE}
+
+# Working directory
+
+setwd("C:/Users/n51867ca/OneDrive - The University of Manchester/R/Second paper")
+
+# input Stata file
+library(openxlsx)
+library(readxl)
+library(foreign)
+library(stringi)
+
+# For a stata file
+
+library(haven)
+ndns_rp_yr9_11a_indiv_20211020 <- read_dta("C:/Users/n51867ca/OneDrive - The University of Manchester/R/National Diet and Nutrition Survey 1-11, 2008-2019/stata/stata13_se/ndns_rp_yr9_11a_indiv_20211020.dta")
+
+#import data individuals
+
+library(readr)
+DS_individuals_exploration_10042024 <- read_csv("DS_individuals_exploration_10042024_full.csv")
+
+#export to csv
+
+#write.csv(ndns_rp_yr5.6a_indiv, "ndns_rp_yr5.6a_indiv.csv")
+#write.csv(ndns_rp_yr1.4a_indiv_uk, "ndns_rp_yr1.4a_indiv_uk.csv")
+
+# Data structure
+
+head(DS_individuals_exploration_10042024)
+ls(DS_individuals_exploration_10042024)
+
+```
+
+## Identification Treatment Groups - BMI
+
+
+
+```{r DiD, echo=FALSE}
+
+library(tidyverse)
+library(lmtest)
+library(dplyr)
+
+DS_individuals_exploration_10042024 <- DS_individuals_exploration_10042024 %>%
+    mutate(Year = as.numeric(Year), # Convert SurveyYear to numeric
+          Year = case_when(
+           Year == 1 ~ 2009,
+           Year == 2 ~ 2010,
+           Year == 3 ~ 2011,
+           Year == 4 ~ 2012,
+           Year == 5 ~ 2013,
+           Year == 6 ~ 2014,
+           Year == 7 ~ 2015,
+           Year == 8 ~ 2016,
+           Year == 9 ~ 2017,
+           Year == 10 ~ 2018,
+           Year == 11 ~ 2019,
+    TRUE ~ Year # Keeps the original value if none of the conditions above are met
+  ))
+
+```
+## Synthetic Control Model - Full dataset
+
+When evaluating policy interventions using observational data, especially in a cross-sectional time series context, there are several robust statistical and econometric models you can consider beyond the standard Difference-in-Differences (DiD) approach. Here are some alternative models that might be suitable for your analysis::
+
+1. Synthetic Control Method
+
+Description: This method constructs a synthetic version of the treated unit (e.g., a region or country) by finding a weighted combination of control units that best approximates the treated unit before the intervention. It's particularly useful when you have a small number of treated units and a longer pre-treatment period.
+Application: Useful for case studies where one unit receives a treatment and the others do not. It provides a more accurate estimation of the counterfactual (what would have happened without the intervention).
+
+2. Regression Discontinuity Design (RDD)
+
+Description: RDD can be used when the assignment of the treatment is determined at least partly by a cutoff point on an assignment variable. It compares units just above and below the cutoff.
+Application: Ideal for evaluating policies with eligibility thresholds, such as age or income requirements.
+
+3. Interrupted Time Series Analysis (ITS)
+
+Description: ITS examines the intervention effects by analyzing changes in the level and slope of the time series following an intervention, distinguishing this effect from underlying trends.
+Application: Suitable for continuous outcome data collected at multiple time points before and after an intervention.
+
+4. Propensity Score Matching (PSM)
+
+Description: PSM attempts to estimate the effect of a treatment by accounting for the covariates that predict receiving the treatment. It matches treated units with control units that have similar propensity scores.
+Application: Useful when you need to control for confounding variables that may affect the assignment to treatment.
+
+5. Panel Data Models
+
+Description: If you have data that spans multiple time periods and units, panel models can be very effective. Fixed effects and random effects models can control for unobserved heterogeneity when this heterogeneity is constant over time and correlated with independent variables.
+Application: Good for data with multiple entities (e.g., countries, states) observed across time.
+
+6. Quantile Regression
+
+Description: This method estimates the effects of variables at different quantiles of the outcome distribution, providing a more comprehensive view of the impact across the distribution rather than just the mean.
+Application: Useful when the impact of the policy might differ across different levels of the outcome variable.
+
+
+Value 1	Label = England: North
+	Value  2	Label = England: Central/Midlands
+	Value  3	Label = England: South (incl. London)
+	Value  4	Label = Scotland
+	Value  5	Label = Wales
+	Value 6	Label = Northern Ireland
+
+
+```{r DiDest, echo=FALSE}
+# Identify the treatment unit (assuming the one with the maximum 'bmivg5')
+treatment_unit <- DS_individuals_exploration_10042024 %>% 
+  filter(bmivg5 == max(bmivg5))
+
+# Identify control units (assuming 'bmivg5' equal to 2)
+control_units <- DS_individuals_exploration_10042024 %>% 
+  filter(bmivg5 == 2)
+
+# Calculate the weighted average of control units to create a synthetic control
+# Weights can be adjusted as needed
+weights <- rep(1 / nrow(control_units), nrow(control_units))
+synthetic_control <- control_units %>% 
+  summarise_all(~ sum(. * weights))
+
+# Compare treatment unit to synthetic control
+comparison <- rbind(treatment_unit, synthetic_control)
+
+# Print the comparison
+print(comparison)
+
+# Load necessary libraries
+library(Synth)
+
+
+# Plot the synthetic control results
+synth.plot(synth.res = synth_out, dataprep.res = dataprep_out, main = "SCM Analysis: Treated vs Synthetic Control")
+
+
+
+library(synthdid)
+library(ggplot2)
+
+# Assuming 'bmivg5' is the unit variable and 'Year' is the time variable
+# Define the treatment and control units
+treatment_unit <- max(DS_individuals_exploration_10042024$bmivg5)  # Assuming the treatment unit has the maximum 'bmivg5'
+control_units <- data[DS_individuals_exploration_10042024$bmivg5 == 2, ]  # Control units where 'bmivg5' equals 2
+
+# Prepare the data matrix for SCM
+data_scm <- data.frame(
+  Year = DS_individuals_exploration_10042024$Year,
+  bmivg5 = DS_individuals_exploration_10042024$bmivg5,
+  FoodEkcal = DS_individuals_exploration_10042024$Sum_of_FoodEkcal
+)
+
+# Run the synthetic control model
+scm_results <- scm(data_scm, 
+                   index = "Year", 
+                   unit = "bmivg5", 
+                   treatment = treatment_unit, 
+                   controls = control_units$bmivg5, 
+                   time.predictors.prior = 2009:2012, 
+                   time.optimize.ssr = 2009:2012, 
+                   time.plot = 2009:2019)
+
+# Plot the results
+ggplot(scm_results, aes(x = Year, y = FoodEkcal)) +
+  geom_line(aes(color = "Actual"), data = subset(scm_results, bmivg5 == treatment_unit)) +
+  geom_line(aes(color = "Synthetic"), data = subset(scm_results, bmivg5 == "Synthetic")) +
+  labs(title = "Synthetic Control Method Analysis",
+       x = "Year",
+       y = "Sum of Food Energy (kcal)") +
+  theme_minimal()
+
+
+# Load necessary libraries
+library(dplyr)
+library(Synth)
+
+
+# Convert bmival2 to numeric and handle non-numeric values
+DS_individuals_exploration_10042024$bmivg5 <- as.numeric(as.character(DS_individuals_exploration_10042024$bmivg5))
+
+# Calculate mean of Sex and AgeR grouped by Year and region
+mean_sex_age <- DS_individuals_exploration_10042024 %>%
+  group_by(Year, region) %>%
+  summarise(Sex_mean = mean(Sex, na.rm = TRUE),
+            AgeR_mean = mean(AgeR, na.rm = TRUE))
+
+# Merge the mean values back to the original dataframe
+DS_individuals_exploration_10042024 <- merge(DS_individuals_exploration_10042024, mean_sex_age, by = c("Year", "region"))
+
+# Special predictor for bmival2 based on region-specific implementation details
+base_year <- min(DS_individuals_exploration_10042024$Year)
+DS_individuals_exploration_10042024$special_predictor_bmivg5 <- DS_individuals_exploration_10042024$bmivg5 + 0.1 * (DS_individuals_exploration_10042024$Year - base_year) +
+  ifelse(DS_individuals_exploration_10042024$region %in% c(1, 2, 3), 0.05, 0)
+
+# Identify treatment and control units
+treatment_unit <- DS_individuals_exploration_10042024[DS_individuals_exploration_10042024$bmivg5 == max(DS_individuals_exploration_10042024$bmivg5), ]
+control_units <- DS_individuals_exploration_10042024[DS_individuals_exploration_10042024$bmivg5 == 2, ]
+
+# Prepare data for SCM
+dataprep_out <- dataprep(foo = DS_individuals_exploration_10042024,
+                         predictors = c("Sex_mean", "AgeR_mean"),
+                         predictors.op = "mean",
+                         dependent = "Sum of FoodEkcal",
+                         unit.variable = "bmivg5",
+                         time.variable = "Year",
+                         treatment.identifier = max(DS_individuals_exploration_10042024$bmivg5),
+                         controls.identifier = min(DS_individuals_exploration_10042024$bmivg5),
+                         time.plot = 2009:2019)
+
+# Run the synthetic control model
+scm <- synth(data.prep = dataprep_out)
+
+# Plot the results
+plot(scm)
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

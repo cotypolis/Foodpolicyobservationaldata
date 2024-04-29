@@ -1,0 +1,332 @@
+---
+title: "National Diet and Nutrition Survey_Two-way Fixed Effects"
+author: "Constanza Avalos"
+date: "2024-04-17"
+output: 
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+## Datasets 2008-2019
+
+This survey contains various datasets, with the food diary report being the focus of my analysis. The food diary report is a self-reported record of all items consumed over a 24-hour period (midnight to midnight) on the previous day. Participants were required to complete four recalls on different days that were not consecutive. There are three primary datasets: one categorizing consumption reports into food categories, another detailing grams consumed per category at an individual level, and finally one indicating nutrient intake at the individual level. These databases include information such as reporting days of the week, time, date, country, age, gender and others. Moreover, they have a multilevel structure encompassing individuals,,households, regions and countries.The data also encompasses socio-demographic details along with anthropometric measurements (BMI, weight, height) at an individual level. Models incorporate survey weights.
+
+## Treatment groups
+
+The dataset "ndns_rp_yr9_yr9_11a_dayleveldietarydata_nutrients_uk_20210831" contains information on nutrient intake at the individual level. I plan to divide the data for analysis, specifically focusing on individuals aged 18 and older. Additionally, this database includes the variable region, which is used to differentiate between the treatment and control groups.
+
+In this quasi-experimental design, individuals from Northern Ireland (D=1) are classified as part of the treatment group while others are assigned to the control group (D=0).
+
+According to existing literature, there were variations in how quickly this policy was implemented by retailers since 2013. Considering that Ireland is geographically distant from mainland United Kingdom, we infer a delay in implementing the labeling policy. Ireland is region number 6 in the dataset.
+
+Individuals in the lower income_tertile (D=1) are included in the treatment group, while others are placed in the control group (D=0) as part of the second quasi-experimental design. Previous research suggests that lower socioeconomic groups have benefited most since retailers implemented this policy. Unlike taxes, food labeling does not place an economic burden on consumers but instead guides them toward healthy eating behavior.
+
+
+```{r data, echo=FALSE}
+
+# Working directory
+
+setwd("C:/Users/n51867ca/OneDrive - The University of Manchester/R/Second paper")
+
+# input Stata file
+library(openxlsx)
+library(readxl)
+library(foreign)
+library(stringi)
+library(readr)
+
+#library(readr)
+DS_individuals_exploration_10042024_SCM_region <- read_csv("DS_individuals_exploration_10042024_SCM_region.csv")
+DS_individuals_exploration_10042024_SCM_SES <- read_csv("DS_individuals_exploration_10042024_SCM_SES.csv")
+
+
+# Data structure
+
+head(DS_individuals_exploration_10042024_SCM_region)
+head(DS_individuals_exploration_10042024_SCM_SES)
+
+
+```
+## Statistics 
+
+```{r summary, echo=FALSE, results='asis'}
+
+library(summarytools)
+
+library(tidyverse)
+library(lmtest)
+library(dplyr)
+
+DS_individuals_exploration_10042024_SCM_region <- DS_individuals_exploration_10042024_SCM_region %>%
+    mutate(Year = as.numeric(Year), # Convert SurveyYear to numeric
+          Year = case_when(
+           Year == 1 ~ 2009,
+           Year == 2 ~ 2010,
+           Year == 3 ~ 2011,
+           Year == 4 ~ 2012,
+           Year == 5 ~ 2013,
+           Year == 6 ~ 2014,
+           Year == 7 ~ 2015,
+           Year == 8 ~ 2016,
+           Year == 9 ~ 2017,
+           Year == 10 ~ 2018,
+           Year == 11 ~ 2019,
+    TRUE ~ Year # Keeps the original value if none of the conditions above are met
+  ))
+
+DS_individuals_exploration_10042024_SCM_SES <- DS_individuals_exploration_10042024_SCM_SES %>%
+    mutate(Year = as.numeric(Year), # Convert SurveyYear to numeric
+          Year = case_when(
+           Year == 1 ~ 2009,
+           Year == 2 ~ 2010,
+           Year == 3 ~ 2011,
+           Year == 4 ~ 2012,
+           Year == 5 ~ 2013,
+           Year == 6 ~ 2014,
+           Year == 7 ~ 2015,
+           Year == 8 ~ 2016,
+           Year == 9 ~ 2017,
+           Year == 10 ~ 2018,
+           Year == 11 ~ 2019,
+    TRUE ~ Year # Keeps the original value if none of the conditions above are met
+  ))
+
+
+# Replace negative values with NA across the entire dataset
+DS_individuals_exploration_10042024_SCM_region[DS_individuals_exploration_10042024_SCM_region < 0] <- NA
+DS_individuals_exploration_10042024_SCM_SES[DS_individuals_exploration_10042024_SCM_SES < 0] <- NA
+
+summary <- dfSummary(DS_individuals_exploration_10042024_SCM_region, graph.magnif = 0.75, plain.ascii = FALSE, style = "grid")
+print(summary, method = 'render')
+
+summary2 <- dfSummary(DS_individuals_exploration_10042024_SCM_SES, graph.magnif = 0.75, plain.ascii = FALSE, style = "grid")
+print(summary2, method = 'render')
+
+```
+
+
+## Two-way Fixed Effects - Region
+
+
+```{r 2fixed, echo=FALSE}
+
+# Install and load the plm package
+library(plm)
+library(stargazer)
+
+# Convert data to a pdata.frame for panel data analysis
+data_2fixed <- pdata.frame(DS_individuals_exploration_10042024_SCM_region, index = c("Region", "Year"))
+
+# Define the model
+model_2fixed <- plm(Sum.of.Energykcal ~ Average.of.bmival2 + Average.of.AgeR + Average.of.Income, data = data_2fixed, model = "within", effect = "twoways")
+model_2fixed2 <- plm(Sum.of.EnergykJ ~ Average.of.bmival2 + Average.of.AgeR + Average.of.Income, data = data_2fixed, model = "within", effect = "twoways")
+model_2fixed3 <- plm(Sum.of.FoodEkcal ~ Average.of.bmival2 + Average.of.AgeR + Average.of.Income, data = data_2fixed, model = "within", effect = "twoways")
+model_2fixed4 <- plm(Sum.of.FoodEkJ ~ Average.of.bmival2 + Average.of.AgeR + Average.of.Income, data = data_2fixed, model = "within", effect = "twoways")
+
+# Summary of the model
+
+# Create a summary table
+stargazer(model_2fixed, model_2fixed2, model_2fixed3, model_2fixed4, type = "text", 
+          title = "Two-way Fixed Effects Models - Region",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Energykcal", "EnergykJ", "FoodEkcal", "FoodEkJ"),
+          covariate.labels = c("Average.of.bmival2", "Average.of.AgeR"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+                    digits = 3) # Number of digits to display
+
+```
+
+## Plotting Region
+
+
+```{r plot, echo=FALSE}
+
+# Load necessary libraries
+library(plm)
+library(dplyr)
+library(ggplot2)
+
+
+# Extract fitted values directly aligned with pdata
+data_2fixed$fitted_values <- fitted(model_2fixed)
+
+# Create a data frame for plotting that includes Year, Region, and Fitted Values
+plot_data <- data_2fixed %>% 
+  as.data.frame() %>%
+  select(Year, Region, fitted_values)
+
+# Plotting
+ggplot(plot_data, aes(x = Year, y = fitted_values, group = Region, color = Region)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Predicted Weighted Sum of Energykcal Across Years",
+       x = "Year",
+       y = "Predicted Weighted Sum of Energykcal") +
+  theme_minimal()
+
+
+# Extract fitted values directly aligned with pdata
+data_2fixed$fitted_values <- fitted(model_2fixed2)
+
+# Create a data frame for plotting that includes Year, Region, and Fitted Values
+plot_data2 <- data_2fixed %>% 
+  as.data.frame() %>%
+  select(Year, Region, fitted_values)
+
+# Plotting
+ggplot(plot_data2, aes(x = Year, y = fitted_values, group = Region, color = Region)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Predicted Weighted Sum of Energykj Across Years",
+       x = "Year",
+       y = "Predicted Weighted Sum of Energykcal") +
+  theme_minimal()
+
+# Extract fitted values directly aligned with pdata
+data_2fixed$fitted_values <- fitted(model_2fixed3)
+
+# Create a data frame for plotting that includes Year, Region, and Fitted Values
+plot_data3 <- data_2fixed %>% 
+  as.data.frame() %>%
+  select(Year, Region, fitted_values)
+
+# Plotting
+ggplot(plot_data3, aes(x = Year, y = fitted_values, group = Region, color = Region)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Predicted Weighted Sum of Foodkcal Across Years",
+       x = "Year",
+       y = "Predicted Weighted Sum of Energykcal") +
+  theme_minimal()
+
+# Extract fitted values directly aligned with pdata
+data_2fixed$fitted_values <- fitted(model_2fixed4)
+
+# Create a data frame for plotting that includes Year, Region, and Fitted Values
+plot_data4 <- data_2fixed %>% 
+  as.data.frame() %>%
+  select(Year, Region, fitted_values)
+
+# Plotting
+ggplot(plot_data4, aes(x = Year, y = fitted_values, group = Region, color = Region)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Predicted Weighted Sum of Foodkcal Across Years",
+       x = "Year",
+       y = "Predicted Weighted Sum of Energykcal") +
+  theme_minimal()
+
+
+
+
+```
+
+## Two-way Fixed Effects - Income
+
+
+```{r 2fixedses, echo=FALSE}
+
+# Install and load the plm package
+library(plm)
+library(stargazer)
+
+# Convert data to a pdata.frame for panel data analysis
+data_2fixed_ses <- pdata.frame(DS_individuals_exploration_10042024_SCM_SES, index = c("Income", "Year"))
+
+# Define the model
+model_2fixed_ses <- plm(Average.of.Sum.of.Energykcal2 ~ Average.of.bmival22 + Average.of.AgeR, data = data_2fixed_ses, model = "within", effect = "twoways")
+model_2fixed2_ses <- plm(Average.of.Sum.of.EnergykJ2 ~ Average.of.bmival22 + Average.of.AgeR, data = data_2fixed_ses, model = "within", effect = "twoways")
+model_2fixed3_ses <- plm(Average.of.Sum.of.FoodEkcal2 ~ Average.of.bmival22 + Average.of.AgeR, data = data_2fixed_ses, model = "within", effect = "twoways")
+model_2fixed4_ses <- plm(Average.of.Sum.of.FoodEkJ2 ~ Average.of.bmival22 + Average.of.AgeR, data = data_2fixed_ses, model = "within", effect = "twoways")
+
+# Summary of the model
+
+# Create a summary table
+stargazer(model_2fixed_ses, model_2fixed2_ses, model_2fixed3_ses, type = "Text", 
+          title = "Two-way Fixed Effects Models - Income",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Energykcal", "EnergykJ", "FoodEkcal"),
+          covariate.labels = c("Average.of.bmival2", "Average.of.AgeR"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+                    digits = 4) # Number of digits to display
+
+
+```
+## Plotting Income
+
+
+```{r plotses, echo=FALSE}
+
+# Load necessary libraries
+library(plm)
+library(dplyr)
+library(ggplot2)
+
+
+# Extract fitted values directly aligned with pdata
+pdf("path_plot2.pdf", width = 7, height = 5)
+data_2fixed_ses$fitted_values <- fitted(model_2fixed_ses)
+
+# Create a data frame for plotting that includes Year, Region, and Fitted Values
+plot_data5 <- data_2fixed_ses %>% 
+  as.data.frame() %>%
+  select(Year, Income, fitted_values)
+
+# Plotting
+ggplot(plot_data5, aes(x = Year, y = fitted_values, group = Income, color = Income)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Predicted Weighted Sum of Energykcal Across Years",
+       x = "Year",
+       y = "Predicted Weighted Sum of Energykcal") +
+  theme_minimal()
+dev.off()
+
+pdf("path_plot3.pdf", width = 7, height = 5)
+# Extract fitted values directly aligned with pdata
+data_2fixed_ses$fitted_values <- fitted(model_2fixed2_ses)
+
+# Create a data frame for plotting that includes Year, Region, and Fitted Values
+plot_data6 <- data_2fixed_ses %>% 
+  as.data.frame() %>%
+  select(Year, Income, fitted_values)
+
+# Plotting
+ggplot(plot_data6, aes(x = Year, y = fitted_values, group = Income, color = Income)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Predicted Weighted Sum of Energykj Across Years",
+       x = "Year",
+       y = "Predicted Weighted Sum of Energykj") +
+  theme_minimal()
+
+dev.off()
+
+# Extract fitted values directly aligned with pdata
+data_2fixed_ses$fitted_values <- fitted(model_2fixed3_ses)
+
+# Create a data frame for plotting that includes Year, Region, and Fitted Values
+plot_data7 <- data_2fixed_ses %>% 
+  as.data.frame() %>%
+  select(Year, Income, fitted_values)
+
+# Plotting
+ggplot(plot_data7, aes(x = Year, y = fitted_values, group = Income, color = Income)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Predicted Weighted Sum of FoodEkcal2 Across Years",
+       x = "Year",
+       y = "Predicted Weighted Sum of Energykcal") +
+  theme_minimal()
+
+
+
+
+
+```

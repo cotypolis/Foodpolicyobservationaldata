@@ -1,0 +1,509 @@
+---
+title: "National Diet and Nutrition Survey_DiD"
+author: "Constanza Avalos"
+date: "2024-04-10"
+output: 
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Datasets 2008-2019
+
+This survey contains various datasets, with the food diary report being the focus of my analysis. The food diary report is a self-reported record of all items consumed over a 24-hour period (midnight to midnight) on the previous day. Participants were required to complete four recalls on different days that were not consecutive. There are three primary datasets: one categorizing consumption reports into food categories, another detailing grams consumed per category at an individual level, and finally one indicating nutrient intake at the individual level. These databases include information such as reporting days of the week, time, date, country, age, gender and others. Moreover, they have a multilevel structure encompassing individuals,,households, regions and countries.The data also encompasses socio-demographic details along with anthropometric measurements (BMI, weight, height) at an individual level.
+
+The dataset "ndns_rp_yr9_yr9_11a_dayleveldietarydata_nutrients_uk_20210831" contains information on nutrients consumed at the individual level. I will split the data to analyse only respondents over 18 years of age. This database also contains the variable BMI which is used to designate the treatment and control group.  
+
+In this database, the BMI variable contains 5 groups corresponding to different BMI ranges. According to NHS guidelines, Below 18.5 = Underweight, 18.5 and below 25 = Healthy weight, 25 and below 30 = Overweight,30 and under 40 = Obese, over 40 = Obese.
+
+In this quasi-experimental design, the control group is adults whose BMI is below 25 (D=0) and the treatment group is adults whose BMI is equal to or above 25 (D=1).
+
+According to current research, the labeling policy implemented by retailers is most beneficial for groups with unhealthy behaviors. They can be considered as the target population.
+
+
+```{r data, echo=FALSE}
+
+# Working directory
+
+setwd("C:/Users/n51867ca/OneDrive - The University of Manchester/R/Second paper")
+
+# input Stata file
+library(openxlsx)
+library(readxl)
+library(foreign)
+library(stringi)
+library(skimr)
+
+
+#import data individuals
+
+library(readr)
+DS_individuals_exploration_10042024_full <- read_csv("DS_individuals_exploration_10042024_full.csv")
+
+head(DS_individuals_exploration_10042024_full)
+
+```
+
+## Statistics 
+
+```{r summary, echo=FALSE, results='asis'}
+
+library(summarytools)
+
+# Replace negative values with NA across the entire dataset
+DS_individuals_exploration_10042024_full[DS_individuals_exploration_10042024_full < 0] <- NA
+
+summary <- dfSummary(DS_individuals_exploration_10042024_full, graph.magnif = 0.75, plain.ascii = FALSE, style = "grid")
+print(summary, method = 'render')
+
+```
+
+
+## Identification of Treatment Groups Based on Body Mass Index BMI
+
+
+```{r DiD, echo=FALSE}
+
+library(tidyverse)
+library(lmtest)
+library(dplyr)
+library(zoo)
+
+DS_individuals_exploration_10042024_full <- DS_individuals_exploration_10042024_full %>%
+    mutate(Year = as.numeric(Year), # Convert SurveyYear to numeric
+          Year = case_when(
+           Year == 1 ~ 2009,
+           Year == 2 ~ 2010,
+           Year == 3 ~ 2011,
+           Year == 4 ~ 2012,
+           Year == 5 ~ 2013,
+           Year == 6 ~ 2014,
+           Year == 7 ~ 2015,
+           Year == 8 ~ 2016,
+           Year == 9 ~ 2017,
+           Year == 10 ~ 2018,
+           Year == 11 ~ 2019,
+    TRUE ~ Year # Keeps the original value if none of the conditions above are met
+  ))
+
+
+# Convert -1 in Body Mass Index (bmival2) to NA, create treatment variable
+DS_individuals_exploration_10042024_full <- DS_individuals_exploration_10042024_full %>%
+    filter(bmivg5 != -1) %>% #BMI
+    mutate(
+    treatment = if_else(bmivg5 > 2, 0, 1), # Include condition here with the condition that defines the treatment group
+    post_policy = if_else(Year >= 2013, 1, 0)
+  )
+
+#create a contingency table
+cont_table <- table(DS_individuals_exploration_10042024_full$Year, DS_individuals_exploration_10042024_full$treatment)
+cont_table
+percent_table <- prop.table(cont_table) * 100
+percent_table
+cont_table_bmi <- table(DS_individuals_exploration_10042024_full$Year, DS_individuals_exploration_10042024_full$bmivg5)
+cont_table_bmi
+cont_table_pol <- table(DS_individuals_exploration_10042024_full$Year, DS_individuals_exploration_10042024_full$post_policy)
+cont_table_pol
+
+```
+## Weighting
+
+I will use the document "6533_ndns_yrs9-11_weights_guide" hosted on the UK Data Service website to combine the data from Years 1-4, Years 5&6, Years 7&8 and Years 9-11. 
+
+The NDNS datasets for Years 1-4, Years 5&6, Years 7&8 and Years 9-11 can be combined for analysis of Years 1-11 but, to produce valid results, the four sets of weights should be re-scaled. This will ensure that the four sets of data are in their correct proportions i.e. 4:2:2:3. A different calculation is required for each weight (individual, nurse, blood etc). 
+
+Re-scaling is necessary because there were different numbers of participants in each dataset/year. The number of participants per dataset/year is as follows: 
+
+1. 1-4 6,828
+2. 5&6 2,546 
+3. 7&8 2,723 
+4. 9-11 3,558 
+5. Total 15,655
+
+If the weights were combined into one variable without any further adjustment, Years 1-4 and Years 7&8 would have more weight per year than other years, while Years 9-11 would have less weight per year. 
+
+To re-scale the weights correctly, it is necessary to perform the following calculations: 
+
+1. Divide each weight variable by its sum (i.e. the sum of the weights); 
+2. Multiply each by the combined sum of the four weights (15,655); 
+3. Multiply the Years 1-4 weight by 4/11, Years 5&6 weight by 2/11, Years 7&8 weight by 2/11 and Years 9-11 weight by 3/11. 
+
+The resulting weights can then be combined into one variable. 
+
+```{r weight, echo=FALSE}
+
+# Multiply each weight by 15655
+
+DS_individuals_exploration_10042024_full$adjustedweight <- DS_individuals_exploration_10042024_full$Weight * 15655
+
+#Multiply each by the combined sum of the four weights
+
+DS_individuals_exploration_10042024_full$FinalWeight <- ifelse(DS_individuals_exploration_10042024_full$Year >= 2009 & DS_individuals_exploration_10042024_full$Year <= 2012, 
+                           (DS_individuals_exploration_10042024_full$adjustedweight / 6828) * 0.3636, 
+                           NA)  # NA for years outside 1 to 4 or you can choose another default value
+
+# Apply different operations based on the year ranges
+DS_individuals_exploration_10042024_full$FinalWeight <- ifelse(DS_individuals_exploration_10042024_full$Year >= 2009 & DS_individuals_exploration_10042024_full$Year <= 2012, 
+                           (DS_individuals_exploration_10042024_full$adjustedweight / 6828) * 0.3636,
+                           ifelse(DS_individuals_exploration_10042024_full$Year >= 2013 & DS_individuals_exploration_10042024_full$Year <= 2014,
+                                  (DS_individuals_exploration_10042024_full$adjustedweight  / 2546) * 0.1818,
+                                  ifelse(DS_individuals_exploration_10042024_full$Year >= 2015 & DS_individuals_exploration_10042024_full$Year <= 2016,
+                                         (DS_individuals_exploration_10042024_full$adjustedweight  / 2723) * 0.1818,
+                                         ifelse(DS_individuals_exploration_10042024_full$Year >= 2017 & DS_individuals_exploration_10042024_full$Year <= 2019,
+                                                (DS_individuals_exploration_10042024_full$adjustedweight  / 3558) * 0.2727,
+                                                NA))))  # NA for years outside specified ranges
+
+
+mean_final_weight_per_year <- aggregate(FinalWeight ~ Year, DS_individuals_exploration_10042024_full, mean, na.rm = TRUE)
+print(mean_final_weight_per_year)
+
+```
+
+## Differences-in-Differences Full dataset - No weights
+
+Source: https://ds4ps.org/PROG-EVAL-III/DiffInDiff.html
+
+```{r DiDest, echo=FALSE}
+
+library(stargazer)
+library(tidyverse)
+library(lmtest)
+
+did_model1 <- lm(`Sum of Energykcal` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_full)
+
+did_model2 <- lm(`Sum of EnergykJ` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_full)
+
+did_model3 <- lm(`Sum of FoodEkcal` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_full)
+
+did_model4 <- lm(`Sum of FoodEkJ` ~ treatment * post_policy, data = DS_individuals_exploration_10042024_full)
+
+# Create a summary table
+stargazer(did_model1, did_model2, did_model3, did_model4, type = "text", 
+          title = "Difference-in-Differences Models",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Energy Kl DiD", "Energy Kj DiD", "Food kl DiD", "Food kj DiD"),
+          covariate.labels = c("Treatment group", "Post-treatment", "Diff in Diff", "Intercept"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+                    digits = 3) # Number of digits to display
+
+```
+
+## Differences-in-Differences Full dataset - Weights
+
+lm and svyglm will always give the same point estimates, but will typically give different standard errors. In the terminology, lm assumes precision weights and svyglm assumes sampling weights.
+
+source: https://bookdown.org/aschmi11/causal_inf/difference-in-differences.html
+
+```{r DiDestw, echo=FALSE}
+
+# using `srvyr`
+library(srvyr)
+library(survey)
+DS_individuals_exploration_10042024_weighted <- DS_individuals_exploration_10042024_full %>% as_survey_design(ids = PSU, weights = FinalWeight)
+
+library(stargazer)
+library(tidyverse)
+library(lmtest)
+
+did_model1_w <- svyglm(`Sum of Energykcal` ~ treatment * post_policy, family = gaussian(), design = DS_individuals_exploration_10042024_weighted)
+
+did_model2_w <- svyglm(`Sum of Energykcal` ~ treatment * post_policy, family = gaussian(), design = DS_individuals_exploration_10042024_weighted)
+
+did_model3_w <- svyglm(`Sum of FoodEkcal` ~ treatment * post_policy, family = gaussian(), design = DS_individuals_exploration_10042024_weighted)
+
+did_model4_w<- svyglm(`Sum of FoodEkJ` ~ treatment * post_policy, family = gaussian(), design = DS_individuals_exploration_10042024_weighted)
+
+# Create a summary table
+stargazer(did_model1_w, did_model2_w, did_model3_w, did_model4_w, type = "text", 
+          title = "Difference-in-Differences Models",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Energykcal", "EnergykJ", "FoodEkcal", "FoodEkJ"),
+          covariate.labels = c("Treatment group", "Post-treatment", "Diff in Diff", "Intercept"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+                    digits = 3) # Number of digits to display
+
+```
+## Differences-in-Differences Full dataset for variable FoodEkcal - Weights + Covariates
+
+The lower AUC/BIC is model 1. 
+
+```{r DiDestw_c, echo=FALSE}
+
+library(stargazer)
+library(tidyverse)
+library(lmtest)
+
+did_model1_w_c <- svyglm(`Sum of FoodEkcal` ~ treatment * post_policy + Sex, family = gaussian(), design = DS_individuals_exploration_10042024_weighted)
+
+did_model2_w_c <- svyglm(`Sum of FoodEkcal` ~ treatment * post_policy + Sex + AgeR, family = gaussian(), design = DS_individuals_exploration_10042024_weighted)
+
+did_model3_w_c <- svyglm(`Sum of FoodEkcal` ~ treatment * post_policy + Sex + AgeR + region, family = gaussian(), design = DS_individuals_exploration_10042024_weighted)
+
+did_model4_w_c <- svyglm(`Sum of FoodEkcal` ~ treatment * post_policy + Sex + AgeR + region + country, family = gaussian(), design = DS_individuals_exploration_10042024_weighted)
+
+
+# Create a summary table
+
+stargazer(did_model1_w_c, did_model2_w_c,did_model3_w_c, did_model4_w_c, type = "text", 
+          title = "Difference-in-Differences Models",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Control 1", "Control 2", "Control 3", "Control 4"),
+          covariate.labels = c("Post-treatment", "Treatment","Sex", "Age", "Region","Country", "Dif. in changes over time", "Intercept - Baseline Average"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+                    digits = 3) # Number of digits to display
+
+#  Lower AIC/BIC
+cat("AIC for Model 1:", AIC(did_model1_w_c), "\n")
+cat("AIC for Model 2:", AIC(did_model2_w_c), "\n")
+cat("AIC for Model 3:", AIC(did_model3_w_c), "\n")
+cat("AIC for Model 4:", AIC(did_model4_w_c), "\n")
+
+```
+
+
+## Differences-in-Differences 18+ only - Weights
+
+
+```{r DiDestadult, echo=FALSE}
+
+#split the database
+
+DS_individuals_exploration_10042024$AgeR <- as.numeric(as.character(DS_individuals_exploration_10042024$AgeR))
+
+library(dplyr)
+DS_individuals_exploration_10042024_filtered <- DS_individuals_exploration_10042024_full %>%
+  dplyr::filter(AgeR >= 17)
+
+
+# using `srvyr`
+library(srvyr)
+library(survey)
+DS_individuals_exploration_10042024_weighted_18 <- DS_individuals_exploration_10042024_filtered %>% as_survey_design(ids = PSU, weights = FinalWeight)
+
+
+#create a contingency table
+cont_tablead <- table(DS_individuals_exploration_10042024_filtered$Year, DS_individuals_exploration_10042024_filtered$treatment)
+cont_tablead
+percent_tablead <- prop.table(cont_tablead) * 100
+percent_tablead
+cont_table_bmiad <- table(DS_individuals_exploration_10042024_filtered$Year, DS_individuals_exploration_10042024_filtered$bmivg5)
+cont_table_bmiad
+cont_table_polad <- table(DS_individuals_exploration_10042024_filtered$Year, DS_individuals_exploration_10042024_filtered$post_policy)
+cont_table_polad
+
+
+did_model5 <- svyglm(`Sum of Energykcal` ~ treatment * post_policy, family = gaussian(), design = DS_individuals_exploration_10042024_weighted_18)
+
+did_model6 <- svyglm(`Sum of EnergykJ` ~ treatment * post_policy, family = gaussian(), design = DS_individuals_exploration_10042024_weighted_18)
+
+did_model7 <- svyglm(`Sum of FoodEkcal` ~ treatment * post_policy, family = gaussian(), design = DS_individuals_exploration_10042024_weighted_18)
+
+did_model8 <- svyglm(`Sum of FoodEkJ` ~ treatment * post_policy, family = gaussian(), design = DS_individuals_exploration_10042024_weighted_18)
+
+# Create a summary table
+stargazer(did_model5, did_model6, did_model7, did_model8, type = "text", 
+          title = "Difference-in-Differences Models, adults only",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Energy Kl DiD", "Energy Kj DiD", "Food kl DiD", "Food kj DiD"),
+          covariate.labels = c("Time-Period", "Post-policy", "Diff and Diff", "Intercept"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+          digits = 3) # Number of digits to display
+
+```
+
+
+## Differences-in-Differences 18+ only for variable FoodEkcal - Weights + Covariates
+
+The lower AUC/BIC is model 1. 
+
+```{r DiDestw_c_16, echo=FALSE}
+
+library(stargazer)
+library(tidyverse)
+library(lmtest)
+
+
+did_model5_w_c <- svyglm(`Sum of FoodEkcal` ~ treatment * post_policy + Sex, family = gaussian(), design = DS_individuals_exploration_10042024_weighted_18)
+
+did_model6_w_c <- svyglm(`Sum of FoodEkcal` ~ treatment * post_policy + Sex + AgeR, family = gaussian(), design = DS_individuals_exploration_10042024_weighted_18)
+
+did_model7_w_c <- svyglm(`Sum of FoodEkcal` ~ treatment * post_policy + Sex + AgeR + region, family = gaussian(), design = DS_individuals_exploration_10042024_weighted_18)
+
+did_model8_w_c <- svyglm(`Sum of FoodEkcal` ~ treatment * post_policy + Sex + AgeR + region + country, family = gaussian(), design = DS_individuals_exploration_10042024_weighted_18)
+
+# Create a summary table
+
+stargazer(did_model5_w_c, did_model6_w_c,did_model7_w_c, did_model8_w_c, type = "text", 
+          title = "Difference-in-Differences Models 18+ Only",
+          header = FALSE, 
+          model.names = FALSE,
+          column.labels = c("Control 1", "Control 2", "Control 3", "Control 4"),
+          covariate.labels = c("Time period", "Post policy", "Sex", "Age", "Region","Country", "Diff Diff", "Intercept"),
+          omit.stat = c("f", "ser"), # Omit statistics like F-statistic and standard error of regression
+                    digits = 3) # Number of digits to display
+
+#  Lower AIC/BIC
+cat("AIC for Model 1:", AIC(did_model5_w_c), "\n")
+cat("AIC for Model 2:", AIC(did_model6_w_c), "\n")
+cat("AIC for Model 3:", AIC(did_model7_w_c), "\n")
+cat("AIC for Model 4:", AIC(did_model8_w_c), "\n")
+
+```
+
+## Check for Parallel Trends Assumption - No weights
+
+```{r DiDplot, echo=FALSE}
+
+DS_individuals_exploration_10042024 %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of Energykcal`, na.rm = TRUE)) %>%
+  ggplot(aes(x = Year, y = mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends", color = "Treatment Group")
+
+DS_individuals_exploration_10042024 %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of EnergykJ`, na.rm = TRUE)) %>%
+  ggplot(aes(x = Year, y = mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends2", color = "Treatment Group")
+
+DS_individuals_exploration_10042024 %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of FoodEkcal`, na.rm = TRUE)) %>%
+  ggplot(aes(x = Year, y = mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends3", color = "Treatment Group")
+
+DS_individuals_exploration_10042024 %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of FoodEkJ`, na.rm = TRUE)) %>%
+  ggplot(aes(x = Year, y = mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends4", color = "Treatment Group")
+
+```
+
+## Check for Parallel Trends Assumption - Weights
+
+
+```{r DiDplotw, echo=FALSE}
+
+# Adjust the outcome by the mean of FinalWeight for each group and year
+adjusted_plot_data <- DS_individuals_exploration_10042024_weighted %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of Energykcal`, na.rm = TRUE),
+            mean_final_weight = mean(FinalWeight, na.rm = TRUE)) %>%
+  mutate(adjusted_mean_outcome = mean_outcome / mean_final_weight) %>%
+  ungroup()
+
+# Plot the adjusted mean outcomes
+ggplot(adjusted_plot_data, aes(x = Year, y = adjusted_mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends Adjusted by Final Weight",
+       y = "Adjusted Mean of Energykcal",
+       x = "Year",
+       color = "Treatment Group")
+
+# Adjust the outcome by the mean of FinalWeight for each group and year
+adjusted_plot_data2 <- DS_individuals_exploration_10042024_weighted  %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of EnergykJ`, na.rm = TRUE),
+            mean_final_weight = mean(FinalWeight, na.rm = TRUE)) %>%
+  mutate(adjusted_mean_outcome = mean_outcome / mean_final_weight) %>%
+  ungroup()
+
+# Plot the adjusted mean outcomes
+ggplot(adjusted_plot_data2, aes(x = Year, y = adjusted_mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends Adjusted by Final Weight",
+       y = "Adjusted Mean of Energykj",
+       x = "Year",
+       color = "Treatment Group")
+
+# Adjust the outcome by the mean of FinalWeight for each group and year
+adjusted_plot_data3 <- DS_individuals_exploration_10042024_weighted  %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of FoodEkcal`, na.rm = TRUE),
+            mean_final_weight = mean(FinalWeight, na.rm = TRUE)) %>%
+  mutate(adjusted_mean_outcome = mean_outcome / mean_final_weight) %>%
+  ungroup()
+
+# Plot the adjusted mean outcomes
+ggplot(adjusted_plot_data3, aes(x = Year, y = adjusted_mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends Adjusted by Final Weight",
+       y = "Adjusted Mean of FoodEkcal",
+       x = "Year",
+       color = "Treatment Group")
+
+# Adjust the outcome by the mean of FinalWeight for each group and year
+adjusted_plot_data4 <- DS_individuals_exploration_10042024_weighted  %>%
+  group_by(Year, treatment) %>%
+  summarise(mean_outcome = mean(`Sum of FoodEkJ`, na.rm = TRUE),
+            mean_final_weight = mean(FinalWeight, na.rm = TRUE)) %>%
+  mutate(adjusted_mean_outcome = mean_outcome / mean_final_weight) %>%
+  ungroup()
+
+# Plot the adjusted mean outcomes
+ggplot(adjusted_plot_data4, aes(x = Year, y = adjusted_mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends Adjusted by Final Weight",
+       y = "Adjusted Mean of FoodEkJ",
+       x = "Year",
+       color = "Treatment Group")
+
+# Adjust the outcome by the mean of FinalWeight for each group and year + Sex
+adjusted_plot_data <- DS_individuals_exploration_10042024_weighted %>%
+  group_by(Year, treatment, Sex) %>%
+  summarise(mean_outcome = mean(`Sum of Energykcal`, na.rm = TRUE),
+            mean_final_weight = mean(FinalWeight, na.rm = TRUE)) %>%
+  mutate(adjusted_mean_outcome = mean_outcome / mean_final_weight) %>%
+  ungroup()
+
+# Plot the adjusted mean outcomes
+ggplot(adjusted_plot_data, aes(x = Year, y = adjusted_mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  labs(title = "Pre-Treatment Trends Adjusted by Final Weight",
+       y = "Adjusted Mean of Energykcal",
+       x = "Year",
+       color = "Treatment Group")
+
+
+library(dplyr)
+library(ggplot2)
+
+# Adjust the outcome by the mean of FinalWeight for each group, year, and sex
+adjusted_plot_data <- DS_individuals_exploration_10042024_weighted %>%
+  group_by(Year, treatment, Sex) %>%
+  summarise(mean_outcome = mean(`Sum of Energykcal`, na.rm = TRUE),
+            mean_final_weight = mean(FinalWeight, na.rm = TRUE),
+            .groups = 'drop') %>%
+  mutate(adjusted_mean_outcome = mean_outcome / mean_final_weight)
+
+# Plot the adjusted mean outcomes, faceted by Sex
+ggplot(adjusted_plot_data, aes(x = Year, y = adjusted_mean_outcome, color = as.factor(treatment))) +
+  geom_line() +
+  facet_wrap(~Sex, scales = "free_y") +  # Faceting by Sex
+  labs(title = "Pre-Treatment Trends Adjusted by Final Weight and Sex",
+       y = "Adjusted Mean of Energykcal",
+       x = "Year",
+       color = "Treatment Group") +
+  theme_minimal()
+
+
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

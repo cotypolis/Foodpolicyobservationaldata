@@ -1,0 +1,96 @@
+---
+title: "National Diet and Nutrition Survey_exploration 10042024"
+author: "Constanza Avalos"
+date: "2024-04-10"
+output: 
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import Dataset
+
+The National Diet and Nutrition Survey (NDNS) Rolling Programme (RP) began in 2008 and is designed to assess the diet, nutrient intake and nutritional status of the general population aged 1.5 years and over living in private households in the UK. (For details of the previous NDNS series, which began in 1992, see the documentation for studies 3481, 4036, 4243 and 5140.)
+
+The programme is funded by Public Health England (PHE), an executive agency of the Department of Health, and the UK Food Standards Agency (FSA).
+
+The NDNS RP is currently carried out by a consortium comprising NatCen Social Research (NatCen) (NatCen, contract lead) and the MRC Epidemiology Unit, University of Cambridge (scientific lead). The MRC Epidemiology Unit joined the consortium in November 2017. Until December 2018, the consortium included the MRC Elsie Widdowson Laboratory, Cambridge (former scientific lead). In Years 1 to 5 (2008/09 – 2012/13) the consortium also included the University College London Medical School (UCL).
+
+Survey activities at the MRC Epidemiology Unit are delivered with the support of the National Institute for Health Research (NIHR) Cambridge Biomedical Research Centre (IS-BRC-1215- 20014), comprising the NIHR BRC Nutritional Biomarker Laboratory and NIHR BRC Dietary Assessment and Physical Activity Group. The NIHR Cambridge Biomedical Research Centre is a partnership between Cambridge University Hospitals NHS Foundation Trust and the University of Cambridge, funded by the NIHR. 
+
+The NDNS RP provides the only source of high quality, nationally representative UK data on the types and quantities of foods consumed by individuals, from which estimates of nutrient intake for the population are derived. Results are used by Government to develop policy and monitor progress toward diet and nutrition objectives of UK Health Departments, for example work to tackle obesity and monitor progress towards a healthy, balanced diet as visually depicted in the Eatwell Guide. The NDNS RP provides an important source of evidence underpinning the Scientific Advisory Committee on Nutrition (SACN) work relating to national nutrition policy. The food consumption data are also used by the FSA to assess exposure to chemicals in food, as part of the risk assessment and communication process in response to a food emergency or to inform negotiations on setting regulatory limits for contaminants.
+
+Datasets are available from the UK Data Service webpage: https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=6533#!/details.
+
+Abstract copyright UK Data Service and data collection copyright owner.
+
+
+## Datasets 2008-2019
+
+
+```{r data, echo=FALSE}
+
+# Working directory
+
+setwd("C:/Users/n51867ca/OneDrive - The University of Manchester/R/Second paper")
+
+# input Stata file
+library(openxlsx)
+library(readxl)
+library(foreign)
+library(stringi)
+
+# For a stata file
+
+library(haven)
+ndns_rp_yr9_11a_indiv_20211020 <- read_dta("C:/Users/n51867ca/OneDrive - The University of Manchester/R/National Diet and Nutrition Survey 1-11, 2008-2019/stata/stata13_se/ndns_rp_yr9_11a_indiv_20211020.dta")
+View(ndns_rp_yr9_11a_indiv_20211020) # BMI measure
+
+ndns_rp_yr9_11a_dayleveldietarydata_nutrients_uk_20210831 <- read_dta("C:/Users/n51867ca/OneDrive - The University of Manchester/R/National Diet and Nutrition Survey 1-11, 2008-2019/stata/stata13_se/ndns_rp_yr9_11a_dayleveldietarydata_nutrients_uk_20210831.dta") # nutrients by each individual
+
+ndns_rp_yr11a_foodleveldietarydata_uk_20210831 <- read_dta("C:/Users/n51867ca/OneDrive - The University of Manchester/R/National Diet and Nutrition Survey 1-11, 2008-2019/stata/stata13_se/ndns_rp_yr11a_foodleveldietarydata_uk_20210831.dta") # food categories
+
+#export to excel files
+
+write.xlsx(ndns_rp_yr9_11a_indiv_20211020, "ndns_rp_yr9_11a_indiv_20211020.xlsx")
+write.xlsx(ndns_rp_yr9_11a_dayleveldietarydata_nutrients_uk_20210831, "ndns_rp_yr9_11a_dayleveldietarydata_nutrients_uk_20210831.xlsx")
+
+#ndns_rp_yr11a_foodleveldietarydata_uk_20210831 <- stri_enc_toutf8(ndns_rp_yr11a_foodleveldietarydata_uk_20210831)
+#write.xlsx(ndns_rp_yr11a_foodleveldietarydata_uk_20210831, "ndns_rp_yr11a_foodleveldietarydata_uk_20210831.xlsx")
+
+#import data individuals
+
+DS_individuals_exploration_10042024 <- read_excel("DS_individuals_exploration_10042024.xlsx", sheet = 4)
+
+# Data structure
+
+head(ndns_rp_yr9_11a_indiv_20211020)
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r model, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

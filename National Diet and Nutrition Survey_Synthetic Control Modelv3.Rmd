@@ -1,0 +1,259 @@
+---
+title: "National Diet and Nutrition Survey_Synthetic Control Model"
+author: "Constanza Avalos"
+date: "2024-04-12"
+output: 
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Datasets 2008-2019
+
+This survey contains various datasets, with the food diary report being the focus of my analysis. The food diary report is a self-reported record of all items consumed over a 24-hour period (midnight to midnight) on the previous day. Participants were required to complete four recalls on different days that were not consecutive. There are three primary datasets: one categorizing consumption reports into food categories, another detailing grams consumed per category at an individual level, and finally one indicating nutrient intake at the individual level. These databases include information such as reporting days of the week, time, date, country, age, gender and others. Moreover, they have a multilevel structure encompassing individuals,,households, regions and countries.The data also encompasses socio-demographic details along with anthropometric measurements (BMI, weight, height) at an individual level. Models incorporate survey weights.
+
+## Treatment groups
+
+The dataset "ndns_rp_yr9_yr9_11a_dayleveldietarydata_nutrients_uk_20210831" contains information on nutrient intake at the individual level. I plan to divide the data for analysis, specifically focusing on individuals aged 18 and older. Additionally, this database includes the variable region, which is used to differentiate between the treatment and control groups.
+
+In this quasi-experimental design, individuals from Northern Ireland (D=1) are classified as part of the treatment group while others are assigned to the control group (D=0).
+
+According to existing literature, there were variations in how quickly this policy was implemented by retailers since 2013. Considering that Ireland is geographically distant from mainland United Kingdom, we infer a delay in implementing the labeling policy. Ireland is region number 6 in the dataset.
+
+Individuals in the lower income_tertile (D=1) are included in the treatment group, while others are placed in the control group (D=0) as part of the second quasi-experimental design. Previous research suggests that lower socioeconomic groups have benefited most since retailers implemented this policy. Unlike taxes, food labeling does not place an economic burden on consumers but instead guides them toward healthy eating behavior.
+
+
+```{r data, echo=FALSE}
+
+# Working directory
+
+#setwd("C:/Users/n51867ca/OneDrive - The University of Manchester/R/Second paper")
+
+# input Stata file
+library(openxlsx)
+library(readxl)
+library(foreign)
+library(stringi)
+
+library(readr)
+DS_individuals_exploration_10042024_SCM_region <- read_csv("DS_individuals_exploration_10042024_SCM_region.csv")
+DS_individuals_exploration_10042024_SCM_SES <- read_csv("DS_individuals_exploration_10042024_SCM_SES.csv")
+
+# Data structure
+
+head(DS_individuals_exploration_10042024_SCM_region)
+head(DS_individuals_exploration_10042024_SCM_SES)
+
+```
+
+## Identification Treatment Groups - BMI
+
+
+```{r DiD, echo=FALSE}
+
+library(tidyverse)
+library(lmtest)
+library(dplyr)
+
+DS_individuals_exploration_10042024_SCM_region <- DS_individuals_exploration_10042024_SCM_region %>%
+    mutate(Year = as.numeric(Year), # Convert SurveyYear to numeric
+          Year = case_when(
+           Year == 1 ~ 2009,
+           Year == 2 ~ 2010,
+           Year == 3 ~ 2011,
+           Year == 4 ~ 2012,
+           Year == 5 ~ 2013,
+           Year == 6 ~ 2014,
+           Year == 7 ~ 2015,
+           Year == 8 ~ 2016,
+           Year == 9 ~ 2017,
+           Year == 10 ~ 2018,
+           Year == 11 ~ 2019,
+    TRUE ~ Year # Keeps the original value if none of the conditions above are met
+  ))
+
+DS_individuals_exploration_10042024_SCM_SES <- DS_individuals_exploration_10042024_SCM_SES %>%
+    mutate(Year = as.numeric(Year), # Convert SurveyYear to numeric
+          Year = case_when(
+           Year == 1 ~ 2009,
+           Year == 2 ~ 2010,
+           Year == 3 ~ 2011,
+           Year == 4 ~ 2012,
+           Year == 5 ~ 2013,
+           Year == 6 ~ 2014,
+           Year == 7 ~ 2015,
+           Year == 8 ~ 2016,
+           Year == 9 ~ 2017,
+           Year == 10 ~ 2018,
+           Year == 11 ~ 2019,
+    TRUE ~ Year # Keeps the original value if none of the conditions above are met
+  ))
+
+```
+
+## Synthetic Control Model - Region
+
+```{r SCMregion, echo=FALSE}
+
+# Load necessary libraries
+library(dplyr)
+library(Synth)
+
+#Error, although it had nothing to do with the unit variable being numeric
+
+DS_individuals_exploration_10042024_SCM_region <- as.data.frame(DS_individuals_exploration_10042024_SCM_region)
+
+is.data.frame(DS_individuals_exploration_10042024_SCM_region)
+class(DS_individuals_exploration_10042024_SCM_region)
+DS_individuals_exploration_10042024_SCM_region <- as.data.frame(DS_individuals_exploration_10042024_SCM_region)   
+class(DS_individuals_exploration_10042024_SCM_region)
+
+#subset for predictor variables and the unit variable
+
+dataprep <- dataprep(
+  foo = DS_individuals_exploration_10042024_SCM_region,
+  predictors = c("Average of bmival2", "Average of AgeR"),
+  predictors.op = "mean",
+  dependent = "Sum of Energykcal", 
+  unit.variable = "Region",  # This should be the unique identifier
+  time.variable = "Year",
+  treatment.identifier = 6,
+  controls.identifier = c(1,5),
+  time.predictors.prior = 2009:2012,  
+  time.optimize.ssr = 2010:2012, 
+  unit.names.variable = "Regionname",
+  time.plot = 2009:2019)
+
+#running the synthetic control analysis
+synth.out <- synth(data.prep = dataprep)
+
+dataprep$X0 #Region 6 is not included because it is the treatment unit.
+dataprep$X1
+dataprep$Z1 # contains the outcome values of the treatment unit BEFORE treatment
+
+#checking the weights of the predictors
+
+print(synth.out$solution.w)
+
+synth.tables <- synth.tab(dataprep.res = dataprep, synth.res = synth.out)
+names(synth.tables)
+
+synth.tables$tab.pred #tab.pred compares pre-treatment predictor values for the treated unit, the synthetic control unit, and all the units in the sample.
+synth.tables$tab.v #tab.v shows the weight corresponding to each predictor
+
+#plotting results
+
+path.plot(synth.res = synth.out,
+           dataprep.res = dataprep,
+           Ylab = "Sum of Energykcal",
+           Xlab = "Year",
+           Ylim = c(0,5000),
+           Legend = c("Northern Ireland", "Synthetic control"),
+           Legend.position = "bottomright"
+           )
+
+
+```
+## Synthetic Control Model - Income
+
+```{r SCMincome, echo=FALSE}
+
+# Load necessary libraries
+library(dplyr)
+library(Synth)
+
+#Error, although it had nothing to do with the unit variable being numeric
+
+DS_individuals_exploration_10042024_SCM_SES <- as.data.frame(DS_individuals_exploration_10042024_SCM_SES)
+
+is.data.frame(DS_individuals_exploration_10042024_SCM_SES)
+class(DS_individuals_exploration_10042024_SCM_SES)
+DS_individuals_exploration_10042024_SCM_SES <- as.data.frame(DS_individuals_exploration_10042024_SCM_SES)   
+class(DS_individuals_exploration_10042024_SCM_SES)
+
+#subset for predictor variables and the unit variable
+
+dataprep2 <- dataprep(
+  foo = DS_individuals_exploration_10042024_SCM_SES,
+  predictors = c("Average of bmival22", "Average of AgeR"),
+  predictors.op = "mean",
+  dependent = "Average of Sum of Energykcal2", 
+  unit.variable = "Income",  # This should be the unique identifier
+  time.variable = "Year",
+  treatment.identifier = 1,
+  controls.identifier = c(2,3),
+  time.predictors.prior = 2009:2012,  
+  time.optimize.ssr = 2010:2012, 
+  time.plot = 2009:2019)
+
+#running the synthetic control analysis
+synth.out2 <- synth(data.prep = dataprep2)
+
+dataprep2$X0 #Region 6 is not included because it is the treatment unit.
+dataprep2$X1
+dataprep2$Z1 # contains the outcome values of the treatment unit BEFORE treatment
+
+#checking the weights of the predictors
+
+print(synth.out2$solution.w) #for incomes
+
+synth.tables2 <- synth.tab(dataprep.res = dataprep2, synth.res = synth.out2)
+names(synth.tables2)
+
+synth.tables2$tab.pred #tab.pred compares pre-treatment predictor values for the treated unit, the synthetic control unit, and all the units in the sample.
+synth.tables2$tab.v #tab.v shows the weight corresponding to each predictor
+
+library(stargazer)
+stargazer(synth.tables2$tab.pred, type = "text", title = "Predictions Table", header = FALSE)
+stargazer(synth.tables2$tab.v, type = "text", title = "Predictions Table", header = FALSE)
+stargazer(synth.tables2$tab.v, type = "text", title = "Predictions Table", header = FALSE)
+
+
+path.plot(synth.res = synth.out2,
+           dataprep.res = dataprep2,
+           Ylab = "Sum of Energykcal",
+           Xlab = "Year",
+           Ylim = c(0,15000),
+           Legend = c("Lower Income Tertile", "Synthetic control"),
+           Legend.position = "bottomright"
+           )
+
+#plotting results
+
+#pdf("path_plot.pdf", width = 7, height = 5)
+#path.plot(synth.res = synth.out2,
+           #dataprep.res = dataprep2,
+           #Ylab = "Average of Sum of Energykcal2",
+           #Xlab = "Year",
+           #Ylim = c(0,15000),
+          # Legend = c("Lower Income", "Synthetic control"),
+          # Legend.position = "bottomright"
+           #)
+#dev.off()
+
+# Running placebo tests
+#placebo.results <- lapply(control_units, function(unit) {
+  #dataprep.placebo <- dataprep(foo = DS_individuals_exploration_10042024_SCM_SES, predictors = predictors, predictors.op = #"mean", 
+                               #dependent = "Average of Sum of Energykcal2", unit.variable = "Income", time.variable = "Year",
+                               #special.predictors = list(list("Average of Sum of Energykcal2", 2013, "mean")), #treatment.identifier = unit,
+                               #controls.identifier = setdiff(control_units, unit), time.predictors.prior = 2009:2012,
+                               #time.optimize.ssr = 2010:2012)
+  
+  #synth.res.placebo <- synth(data.prep.obj = dataprep.placebo)
+  #path.plot(synth.res = synth.res.placebo, dataprep.res = dataprep.placebo)
+  
+ # return(synth.res.placebo)
+#})
+
+#print(placebo.results)
+
+```
+
+

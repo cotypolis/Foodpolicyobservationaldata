@@ -1,0 +1,221 @@
+---
+title: "National Diet and Nutrition Survey_Synthetic Control Model"
+author: "Constanza Avalos"
+date: "2024-04-12"
+output: 
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Datasets 2008-2019
+
+This Survey has different datasets. I will use the food diary report. This is a participant self-report of everything eaten and drunk over a 24-hour period (midnight to midnight), the preceding day. Participants in this study were asked to complete 4 recalls on non-consecutive days. 3 datasets are key. 1) One that groups the consumption report into food categories. 2) One that contains the detail of grams consumed by each category at the individual level and 3) one that contains the amount of nutrients consumed at the individual level. The databases have details such as days of the week of the reports, time, data, country, age, gender, among others. In addition, the database is multilevel: individual, household, region, country. Finally, there is another database that contains socio-demographic information, anthropometric measures (BMI, weight, height) and more at the level of the individual. 
+
+Body mass index (BMI)
+BMI is a measure of whether you're a healthy weight for your height. You can use the NHS BMI healthy weight calculator to find out your BMI.
+
+
+
+```{r data, echo=FALSE}
+
+# Working directory
+
+#setwd("C:/Users/n51867ca/OneDrive - The University of Manchester/R/Second paper")
+
+# input Stata file
+library(openxlsx)
+library(readxl)
+library(foreign)
+library(stringi)
+
+# For a stata file
+
+#library(haven)
+#ndns_rp_yr9_11a_indiv_20211020 <- read_dta("C:/Users/n51867ca/OneDrive - The University of Manchester/R/National Diet and Nutrition Survey 1-11, #2008-2019/stata/stata13_se/ndns_rp_yr9_11a_indiv_20211020.dta")
+
+#import data individuals
+
+#library(readr)
+#DS_individuals_exploration_10042024 <- read_csv("DS_individuals_exploration_10042024_full.csv")
+
+#export to csv
+
+#write.csv(ndns_rp_yr5.6a_indiv, "ndns_rp_yr5.6a_indiv.csv")
+#write.csv(ndns_rp_yr1.4a_indiv_uk, "ndns_rp_yr1.4a_indiv_uk.csv")
+
+# Data structure
+
+head(DS_individuals_exploration_10042024_SCM_region)
+ls(DS_individuals_exploration_10042024_SCM_region)
+
+```
+
+## Identification Treatment Groups - BMI
+
+
+
+```{r DiD, echo=FALSE}
+
+library(tidyverse)
+library(lmtest)
+library(dplyr)
+
+DS_individuals_exploration_10042024_SCM_region <- DS_individuals_exploration_10042024_SCM_region %>%
+    mutate(Year = as.numeric(Year), # Convert SurveyYear to numeric
+          Year = case_when(
+           Year == 1 ~ 2009,
+           Year == 2 ~ 2010,
+           Year == 3 ~ 2011,
+           Year == 4 ~ 2012,
+           Year == 5 ~ 2013,
+           Year == 6 ~ 2014,
+           Year == 7 ~ 2015,
+           Year == 8 ~ 2016,
+           Year == 9 ~ 2017,
+           Year == 10 ~ 2018,
+           Year == 11 ~ 2019,
+    TRUE ~ Year # Keeps the original value if none of the conditions above are met
+  ))
+
+
+```
+
+## Synthetic Control Model - Full dataset
+
+When evaluating policy interventions using observational data, especially in a cross-sectional time series context, there are several robust statistical and econometric models you can consider beyond the standard Difference-in-Differences (DiD) approach. Here are some alternative models that might be suitable for your analysis::
+
+1. Synthetic Control Method
+
+Description: This method constructs a synthetic version of the treated unit (e.g., a region or country) by finding a weighted combination of control units that best approximates the treated unit before the intervention. It's particularly useful when you have a small number of treated units and a longer pre-treatment period.
+Application: Useful for case studies where one unit receives a treatment and the others do not. It provides a more accurate estimation of the counterfactual (what would have happened without the intervention).
+
+2. Regression Discontinuity Design (RDD)
+
+Description: RDD can be used when the assignment of the treatment is determined at least partly by a cutoff point on an assignment variable. It compares units just above and below the cutoff.
+Application: Ideal for evaluating policies with eligibility thresholds, such as age or income requirements.
+
+3. Interrupted Time Series Analysis (ITS)
+
+Description: ITS examines the intervention effects by analyzing changes in the level and slope of the time series following an intervention, distinguishing this effect from underlying trends.
+Application: Suitable for continuous outcome data collected at multiple time points before and after an intervention.
+
+4. Propensity Score Matching (PSM)
+
+Description: PSM attempts to estimate the effect of a treatment by accounting for the covariates that predict receiving the treatment. It matches treated units with control units that have similar propensity scores.
+Application: Useful when you need to control for confounding variables that may affect the assignment to treatment.
+
+5. Panel Data Models
+
+Description: If you have data that spans multiple time periods and units, panel models can be very effective. Fixed effects and random effects models can control for unobserved heterogeneity when this heterogeneity is constant over time and correlated with independent variables.
+Application: Good for data with multiple entities (e.g., countries, states) observed across time.
+
+6. Quantile Regression
+
+Description: This method estimates the effects of variables at different quantiles of the outcome distribution, providing a more comprehensive view of the impact across the distribution rather than just the mean.
+Application: Useful when the impact of the policy might differ across different levels of the outcome variable.
+
+Regions:
+
+Value = 1.0	Label = England: North
+	Value = 2.0	Label = England: Central/Midlands
+	Value = 3.0	Label = England: South (incl. London)
+	Value = 4.0	Label = Scotland
+	Value = 5.0	Label = Wales
+	Value = 6.0	Label = Northern Ireland
+	Value = -9.0	Label = Refused
+	Value = -8.0	Label = Don't know
+	Value = -5.0	Label = Different variable this survey year
+	Value = -4.0	Label = Not applicable to survey year
+	Value = -1.0	Label = Not applicable
+
+
+
+```{r DiDest, echo=FALSE}
+
+# Load necessary libraries
+library(dplyr)
+library(Synth)
+
+#Error, although it had nothing to do with the unit variable being numeric
+
+DS_individuals_exploration_10042024_SCM <- as.data.frame(DS_individuals_exploration_10042024_SCM_region)
+
+is.data.frame(DS_individuals_exploration_10042024_SCM_region)
+class(DS_individuals_exploration_10042024_SCM_region)
+DS_individuals_exploration_10042024_SCM <- as.data.frame(DS_individuals_exploration_10042024_SCM_region)
+class(DS_individuals_exploration_10042024_SCM)
+
+DS_individuals_exploration_10042024$bmivg5 <- as.numeric(as.character(DS_individuals_exploration_10042024$bmivg5))
+
+
+#subset for predictor variables and the unit variable
+
+dataprep <- dataprep(
+  foo = DS_individuals_exploration_10042024_SCM,
+  predictors = c(`Average of bmival2`, `Average of AgeR`),
+  predictors.op = "mean",
+  dependent = "Sum of Energykcal", 
+  unit.variable = "Region",  # This should be the unique identifier
+  time.variable = "Year",
+  treatment.identifier = 6,
+  controls.identifier = c(1,5),
+  time.predictors.prior = 2009:2012,  
+  time.optimize.ssr = 2010:2012, 
+  unit.names.variable = "Regionname",
+  time.plot = 2009:2019)
+
+#running the synthetic control analysis
+synth.out <- synth(data.prep = dataprep)
+
+#plotting results
+
+path.plot(synth.res = synth.out, dataprep.res = dataprep, Ylab = "Calories", Xlab = "Year", Legend = c("Actual", "Synthetic"))
+
+#checking the weights of the predictors
+
+print(synth.out$solution.w)
+
+
+DS_individuals_exploration_10042024_SCM
+
+
+# Load necessary library
+library(Synth)
+
+# Step 2: Prepare your data (assuming 'weighted_data' is already prepared and loaded)
+data_synth <- weighted_data
+
+# Define predictors and outcome
+predictors <- c("Weighted_Average_bmival2")  # Add more predictors if needed
+outcome <- "Weighted_Sum_of_Energykcal"
+
+# Define the treated unit and the control units
+treated_unit <- 6  # Assuming 'Region' 1 is the treated unit
+control_units <- 1:5  # Assuming 'Regions' 2 to 11 are control units
+time_periods <- nrow(data_synth) / length(unique(data_synth$Region))  # Calculate the number of time periods
+
+# Step 4: Setup and run the Synthetic Control Method
+synth_out <- synth(data = data_synth,
+                   Yname = "Weighted_Sum_of_Energykcal",
+                   Xname = c("Weighted_Average_bmival2"),
+                   Tr = 6,
+                   Co = c(1:5),
+                   T0 = time_periods - 4,  # Number of pre-intervention periods
+                   Z = 1,  # Number of predictors
+                   unit.variable = "Region",
+                   time.variable = "Year")
+
+# Print the results
+print(synth_out)
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

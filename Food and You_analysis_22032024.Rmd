@@ -1,0 +1,135 @@
+---
+title: "Food and You_analysis_22032024"
+date: "2024-03-22"
+output: 
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import Dataset
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+## Merging Datasets 2018-2016
+
+```{r pressure, echo=FALSE}
+
+# input Stata file
+library(readxl)
+
+# Working directory
+
+setwd("C:/Users/n51867ca/OneDrive - The University of Manchester/R/Second paper")
+
+FoodandYou_2010_2018 <- read_excel("Foodandyou_datamerged_22032024.xlsx")
+
+# Data structure
+head(FoodandYou_2010_2018)
+
+```
+
+
+## How easy do you find it to read the labelling on food products?
+
+Alternatives: 
+-9	Refused
+-8	Don't know
+-1	Not applicable
+1	Very easy to read
+2	Quite easy to read
+3	Neither easy nor difficult to read
+4	Quite difficult to read
+5	Very difficult to read
+
+
+
+```{r label1, echo=FALSE}
+
+# Count the number of cases per alternative using table()
+
+table(FoodandYou_2010_2018$`How easy do you find it to read the labelling on food products (e.g. ingredients, nutrition or storage information) in terms of the size of the print (using glasses or contact lenses if you wear them)?`, FoodandYou_2010_2018$Wave) 
+
+```
+
+## In response to when you had food poisoning [more than once or most recently] have you done any of the following: Read food labels more carefully
+
+Alternatives:
+
+-9	Refused
+-8	Don't know
+-1	Not applicable
+0	Not mentioned
+1	Mentioned
+
+
+```{r label2, echo=FALSE}
+
+# Count the number of cases per alternative using table()
+
+table(FoodandYou_2010_2018$`In response to when you had food poisoning [more than once or most recently] have you done any of the following: Read food labels more carefully`, FoodandYou_2010_2018$Wave) 
+
+```
+
+## Looking at this card, do you get information about how to prepare and cook food safely at home from any of these sources?: Product packaging
+
+Alternatives:
+
+-9	Refused
+-8	Don't know
+-1	Not applicable
+0	Not mentioned
+1	Mentioned
+
+```{r label3, echo=FALSE}
+
+# Count the number of cases per alternative using table()
+
+table(FoodandYou_2010_2018$`Looking at this card, do you get information about how to prepare and cook food safely at home from any of these sources?: Product packaging`, FoodandYou_2010_2018$Wave) 
+
+
+```
+## Missing values
+
+```{r miss, echo=FALSE}
+
+library(dplyr)
+
+FoodandYou_2010_2018_na <- FoodandYou_2010_2018 %>%
+  filter(!`How easy do you find it to read the labelling on food products (e.g. ingredients, nutrition or storage information) in terms of the size of the print (using glasses or contact lenses if you wear them)?` %in% c(-8, -2), !is.na(`How easy do you find it to read the labelling on food products (e.g. ingredients, nutrition or storage information) in terms of the size of the print (using glasses or contact lenses if you wear them)?`))
+
+table(FoodandYou_2010_2018_na$`How easy do you find it to read the labelling on food products (e.g. ingredients, nutrition or storage information) in terms of the size of the print (using glasses or contact lenses if you wear them)?`, FoodandYou_2010_2018_na$Wave) 
+
+```
+
+## Difference-in-Differences (DiD), no differences in policy implementation
+
+```{r did, echo=FALSE}
+
+# Assuming 'year' is your time variable and the policy was implemented in 2015
+FoodandYou_2010_2018_na$policy <- ifelse(FoodandYou_2010_2018_na$Wave >= 2014, 1, 0)
+
+# Now, every observation has a 'policy' indicator: 0 for pre-policy and 1 for post-policy
+
+# Load the necessary library
+library(lmtest)
+
+# Run the DiD model
+did_model <- lm(`How easy do you find it to read the labelling on food products (e.g. ingredients, nutrition or storage information) in terms of the size of the print (using glasses or contact lenses if you wear them)?` ~ policy, data = FoodandYou_2010_2018_na)
+
+did_model1 <- lm(`How easy do you find it to read the labelling on food products (e.g. ingredients, nutrition or storage information) in terms of the size of the print (using glasses or contact lenses if you wear them)?` ~ policy + Gender, data = FoodandYou_2010_2018_na)
+
+# View the summary of the model
+summary(did_model)
+summary(did_model1)
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
